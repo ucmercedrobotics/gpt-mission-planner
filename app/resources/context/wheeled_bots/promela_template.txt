@@ -1,0 +1,13 @@
+mtype = { takeThermalPicture, takeAmbientTemperature, takeCO2Reading, moveToLocation };
+
+typedef Action {
+    mtype actionType;
+    int parameter1;
+    int parameter2;
+};
+
+typedef Task {
+    int id;
+    Action action;
+};
+

@@ -4,4 +4,3 @@ lxml
 lxml-stubs
 click
 PyYAML
-nl2ltl==0.0.6

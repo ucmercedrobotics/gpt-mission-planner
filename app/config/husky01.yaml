@@ -11,3 +11,6 @@ farm_layout: "./app/resources/reza_small.geojson"
 # who to send this too?
 host: 127.0.0.1
 port: 12345
+# LTL generation?
+ltl: False
+promela_template: "./app/resources/specs/promela_template.txt"

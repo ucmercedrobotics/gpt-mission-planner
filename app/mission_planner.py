@@ -2,6 +2,7 @@ from typing import Tuple
 import logging
 import tempfile
 import subprocess
+import re
 
 import click
 from lxml import etree
@@ -61,13 +62,56 @@ class MissionPlanner:
         # start connection to ROS agent
         self.nic.init_socket()
 
-    def parse_gpt_code(self, mp_out: str, token: str = "xml") -> str:
+    def run(self):
+        while True:
+            # ask user for their mission plan
+            mp_input: str = input("Enter the specifications for your mission plan: ")
+            mp_out: str = self.gpt.ask_gpt(mp_input, True)
+            self.logger.debug(mp_out)
+            mp_out = self._parse_gpt_code(mp_out)
+            output_path = self._write_out_temp_file(mp_out)
+            self.logger.debug(f"GPT output written to {output_path}...")
+            ret, e = self._validate_output(output_path)
+
+            if not ret:
+                retry: int = 0
+                while not ret and retry < self.max_retries:
+                    self.logger.debug(f"Retrying after failed to validate GPT mission plan: {e}")
+                    mp_out = self.gpt.ask_gpt(e, True)
+                    mp_out = self._parse_gpt_code(mp_out)
+                    output_path = self._write_out_temp_file(mp_out)
+                    self.logger.debug(f"Temp GPT output written to {output_path}...")
+                    ret, e = self._validate_output(output_path)
+                    retry += 1
+            # TODO: should we do this after every mission plan or leave them in context?
+            self.gpt.reset_context()
+
+            if not ret:
+                self.logger.error("Unable to generate mission plan from your prompt...")
+            else:
+                self.logger.debug("Successful mission plan generation...")
+
+            # if specified in the YAM config to formally verify
+            if self.ltl:
+                self._formal_verification(mp_input, output_path)
+
+            if not ret:
+                self.logger.error("Unable to formally verify from your prompt...")
+            else:
+                # TODO: send off mission plan to TCP client
+                self.nic.send_file(output_path)
+                self.logger.debug("Successful mission plan generation...")
+            
+        # TODO: decide how the reuse flow works
+        self.nic.close_socket()
+
+    def _parse_gpt_code(self, mp_out: str, token: str = "xml") -> str:
         xml_response: str = mp_out.split("```" + token + "\n")[1]
         xml_response = xml_response.split("```")[0]
 
         return xml_response
 
-    def write_out_temp_file(self, text: str) -> str:
+    def _write_out_temp_file(self, text: str) -> str:
         # Create a temporary file in the specified directory
         with tempfile.NamedTemporaryFile(dir=self.log_directory, delete=False, mode="w") as temp_file:
             temp_file.write(text)
@@ -76,7 +120,7 @@ class MissionPlanner:
         
         return temp_file_name
 
-    def validate_output(self, xml_file: str) -> Tuple[bool, str]:
+    def _validate_output(self, xml_file: str) -> Tuple[bool, str]:
         try:
             # Parse the XSD file
             with open(self.schema_path, "rb") as schema_file:
@@ -97,50 +141,7 @@ class MissionPlanner:
         except Exception as e:
             return False, "An error occurred: " + str(e)
 
-    def run(self):
-        while True:
-            # ask user for their mission plan
-            mp_input: str = input("Enter the specifications for your mission plan: ")
-            mp_out: str = self.gpt.ask_gpt(mp_input, True)
-            self.logger.debug(mp_out)
-            mp_out = self.parse_gpt_code(mp_out)
-            output_path = self.write_out_temp_file(mp_out)
-            self.logger.debug(f"GPT output written to {output_path}...")
-            ret, e = self.validate_output(output_path)
-
-            if not ret:
-                retry: int = 0
-                while not ret and retry < self.max_retries:
-                    self.logger.debug(f"Retrying after failed to validate GPT mission plan: {e}")
-                    mp_out = self.gpt.ask_gpt(e, True)
-                    mp_out = self.parse_gpt_code(mp_out)
-                    output_path = self.write_out_temp_file(mp_out)
-                    self.logger.debug(f"Temp GPT output written to {output_path}...")
-                    ret, e = self.validate_output(output_path)
-                    retry += 1
-            # TODO: should we do this after every mission plan or leave them in context?
-            self.gpt.reset_context()
-
-            if not ret:
-                self.logger.error("Unable to generate mission plan from your prompt...")
-            else:
-                self.logger.debug("Successful mission plan generation...")
-
-            # if specified in the YAM config to formally verify
-            if self.ltl:
-                self.formal_verification(mp_input, output_path)
-
-            if not ret:
-                self.logger.error("Unable to formally verify from your prompt...")
-            else:
-                # TODO: send off mission plan to TCP client
-                self.nic.send_file(output_path)
-                self.logger.debug("Successful mission plan generation...")
-            
-        # TODO: decide how the reuse flow works
-        self.nic.close_socket()
-
-    def formal_verification(self, mission_query: str, xml_mp_path: str) -> None:
+    def _formal_verification(self, mission_query: str, xml_mp_path: str) -> None:
         self.logger.info("Generating Promela from mission...")
         # from the mission output, create an XML tree
         self.promela.init_xml_tree(xml_mp_path)
@@ -153,20 +154,37 @@ class MissionPlanner:
         # use second GPT agent to generate LTL
         ltl_out: str = self.pml_gpt.ask_gpt(mission_query, True)
         # parse out LTL statement
-        ltl_out = self.parse_gpt_code(ltl_out, "ltl")
+        ltl_out = self._parse_gpt_code(ltl_out, "ltl")
         # append to promela file
         promela_string += "\n" + ltl_out
         # write pml system and LTL to file
-        self.promela_path: str = self.write_out_temp_file(promela_string)
+        self.promela_path: str = self._write_out_temp_file(promela_string)
         # execute spin verification
         try:
-            self.logger.info(subprocess.check_output([self.spin_path, "-search", self.promela_path]))
+            # NOTE: this command doesn't produce the trail required for feedback to GPT, though it isn't very useful
+            spin_out: str = subprocess.check_output([self.spin_path, "-search", "-n", self.promela_path])
+            self.logger.info(spin_out)
         except subprocess.CalledProcessError as err:
             self.logger.error(err)
-        # TODO: figure out if validation was successful, retry if not
-    
-    def get_promela_output_path(self) -> str|None:
-        return self.promela_path
+
+        errors: int = self._spin_regex(spin_out)
+        if errors > 0:
+            self.logger.error(f"Functional model fails never claim {errors} times...")
+            # TODO: redo with relevant information
+
+    def _spin_regex(self, spin_out: str) -> int:
+        errors: int = 0
+
+        match = re.search(r"errors:\s*(\d+)", spin_out)
+
+        # if the output matches the normal format, get the number of errors
+        if match:
+            errors = match.group(1)
+        # if this happens that probably means that the output was bad...
+        else:
+            errors = -1
+
+        return errors
 
 
 @click.command()

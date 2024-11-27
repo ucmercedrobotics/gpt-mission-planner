@@ -16,7 +16,7 @@ class NetworkInterface:
     def init_socket(self) -> None:
         self.client_socket.connect((self.host, self.port))
 
-    def send_file(self, file_path):
+    def send_file(self, file_path) -> None:
         bytes_sent: int = 0
 
         with open(file_path, "rb") as file:
@@ -27,8 +27,5 @@ class NetworkInterface:
 
         self.logger.info("File sent successfully.")
 
-    def receive_acknowledgement(self):
-        pass
-
-    def close_socket(self):
+    def close_socket(self) -> None:
         self.client_socket.close()

@@ -65,7 +65,7 @@ class GPTInterface:
 
         self.initial_context_length = len(self.context)
 
-    def add_context(self, user: str, assistant: str) -> None:
+    def add_context(self, user: str, assistant: str | None) -> None:
         # generate new GPT API dict string context
         new_user_context = {"role": "user", "content": user}
         new_assistant_context = {"role": "assistant", "content": assistant}
@@ -77,7 +77,7 @@ class GPTInterface:
         self.context = self.context[0 : self.initial_context_length]
 
     # TODO: should we expose OpenAI object or string response?
-    def ask_gpt(self, prompt: str, add_context: bool = False) -> str:
+    def ask_gpt(self, prompt: str, add_context: bool = False) -> str | None:
         message: list = self.context.copy()
         message.append({"role": "user", "content": prompt})
 
@@ -88,7 +88,7 @@ class GPTInterface:
             temperature=self.temperature,
         )
 
-        response: str = completion.choices[0].message.content
+        response: str | None = completion.choices[0].message.content
 
         if add_context:
             self.add_context(prompt, response)

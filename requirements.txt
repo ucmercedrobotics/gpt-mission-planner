@@ -4,3 +4,7 @@ lxml
 lxml-stubs
 click
 PyYAML
+types-PyYAML
+black
+mypy
+pre-commit

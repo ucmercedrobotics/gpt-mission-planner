@@ -43,7 +43,9 @@ class MissionPlanner:
         # start connection to ROS agent
         self.nic.init_socket()
 
-    def parse_xml(self, mp_out: str) -> str:
+    def parse_xml(self, mp_out: str | None) -> str:
+        assert isinstance(mp_out, str)
+
         xml_response: str = mp_out.split("```xml\n")[1]
         xml_response = xml_response.split("```")[0]
 
@@ -68,8 +70,8 @@ class MissionPlanner:
             schema = etree.XMLSchema(schema_root)
 
             # Parse the XML file
-            with open(xml_file, "rb") as xml_file:
-                xml_doc = etree.parse(xml_file)
+            with open(xml_file, "rb") as fp:
+                xml_doc = etree.parse(fp)
 
             # Validate the XML file against the XSD schema
             schema.assertValid(xml_doc)
@@ -81,11 +83,11 @@ class MissionPlanner:
         except Exception as e:
             return False, "An error occurred: " + str(e)
 
-    def run(self):
+    def run(self) -> None:
         while True:
             # ask user for their mission plan
             mp_input: str = input("Enter the specifications for your mission plan: ")
-            mp_out: str = self.gpt.ask_gpt(mp_input, True)
+            mp_out: str | None = self.gpt.ask_gpt(mp_input, True)
             self.logger.debug(mp_out)
             mp_out = self.parse_xml(mp_out)
             output_path = self.write_out_xml(mp_out)
@@ -126,7 +128,7 @@ class MissionPlanner:
 )
 def main(config: str):
     with open(config, "r") as file:
-        config_yaml: yaml.Node = yaml.safe_load(file)
+        config_yaml: dict = yaml.safe_load(file)
 
     try:
         # configure logger

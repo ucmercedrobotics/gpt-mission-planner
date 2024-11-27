@@ -1,7 +1,16 @@
 repos:
-  - repo: https://github.com/psf/black
-    rev: 22.3.0
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+  - repo: https://github.com/psf/black-pre-commit-mirror
+    rev: 24.8.0
     hooks:
       - id: black
-        args: [--line-length=88]
-        language_version: python3.11
+        exclude: '^(resources/)'
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: 'v1.13.0'  # Use the sha / tag you want to point at
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-PyYAML==6.0.12.20240917]

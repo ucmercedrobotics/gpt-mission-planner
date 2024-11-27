@@ -1,7 +1,11 @@
 CONTAINER_NAME := gpt-mission-planner
 REPO_NAME := gpt-mission-planner
 
-build-image: 
+repo-init:
+	python3.11 -m pip install black pre-commit mypy && \
+	pre-commit install
+
+build-image:
 	docker build --build-arg UID=$(shell id -u) --build-arg GID=$(shell id -g) . -t ${CONTAINER_NAME} --target local
 
 bash:

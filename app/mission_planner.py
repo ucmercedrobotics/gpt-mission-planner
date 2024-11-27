@@ -17,7 +17,7 @@ class MissionPlanner:
         schema_path: str,
         farm_layout: str,
         max_retries: int,
-        max_tokens: int, 
+        max_tokens: int,
         temperature: float,
         log_directory: str,
         logger: logging.Logger,
@@ -32,7 +32,9 @@ class MissionPlanner:
         # max number of times that GPT can try and fix the mission plan
         self.max_retries: int = max_retries
         # init gpt interface
-        self.gpt: GPTInterface = GPTInterface(self.logger, token_path, max_tokens, temperature)
+        self.gpt: GPTInterface = GPTInterface(
+            self.logger, token_path, max_tokens, temperature
+        )
         self.gpt.init_context(self.schema_path, self.farm_layout)
 
     def configure_network(self, host: str, port: int) -> None:
@@ -49,11 +51,13 @@ class MissionPlanner:
 
     def write_out_xml(self, mp_out: str) -> str:
         # Create a temporary file in the specified directory
-        with tempfile.NamedTemporaryFile(dir=self.log_directory, delete=False, mode="w") as temp_file:
+        with tempfile.NamedTemporaryFile(
+            dir=self.log_directory, delete=False, mode="w"
+        ) as temp_file:
             temp_file.write(mp_out)
             # name of temp file output
             temp_file_name = temp_file.name
-        
+
         return temp_file_name
 
     def validate_output(self, xml_file: str) -> Tuple[bool, str]:
@@ -64,7 +68,7 @@ class MissionPlanner:
             schema = etree.XMLSchema(schema_root)
 
             # Parse the XML file
-            with open(xml_file, 'rb') as xml_file:
+            with open(xml_file, "rb") as xml_file:
                 xml_doc = etree.parse(xml_file)
 
             # Validate the XML file against the XSD schema
@@ -91,7 +95,9 @@ class MissionPlanner:
             if not ret:
                 retry: int = 0
                 while not ret and retry < self.max_retries:
-                    self.logger.debug(f"Retrying after failed to validate GPT mission plan: {e}")
+                    self.logger.debug(
+                        f"Retrying after failed to validate GPT mission plan: {e}"
+                    )
                     mp_out = self.gpt.ask_gpt(e, True)
                     mp_out = self.parse_xml(mp_out)
                     output_path = self.write_out_xml(mp_out)
@@ -107,7 +113,7 @@ class MissionPlanner:
                 # TODO: send off mission plan to TCP client
                 self.nic.send_file(output_path)
                 self.logger.debug("Successful mission plan generation...")
-            
+
         # TODO: decide how the reuse flow works
         self.nic.close_socket()
 

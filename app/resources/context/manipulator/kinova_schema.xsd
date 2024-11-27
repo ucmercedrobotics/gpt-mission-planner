@@ -21,54 +21,67 @@
         </xs:complexType>
     </xs:element>
 
-    <!-- Simple type for Robot Actions -->
-    <xs:simpleType name="robotActionTypes">
+    <!-- Simple type for Manipulator Actions -->
+    <xs:simpleType name="manipulatorActionTypes">
         <xs:restriction base="xs:string">
-            <xs:enumeration value="takeThermalPicture"/>
-            <xs:enumeration value="takeAmbientTemperature"/>
-            <xs:enumeration value="takeCO2Reading"/>
-            <xs:enumeration value="moveToLocation"/>
+            <xs:enumeration value="pickObject"/>
+            <xs:enumeration value="placeObject"/>
+            <xs:enumeration value="identifyObject"/>
+            <xs:enumeration value="nextBestView"/>
+            <xs:enumeration value="storePointCloud"/>
+            <!-- TODO: I think there needs to be something here a bit higher level to identify object? -->
         </xs:restriction>
     </xs:simpleType>
 
-    <!-- Complex type for takeThermalPicture -->
-    <xs:complexType name="takeThermalPictureType">
+    <!-- Complex type for pickObject -->
+    <xs:complexType name="pickObjectType">
         <xs:sequence>
-            <xs:element name="numberOfPictures" type="xs:integer"/>
+            <xs:element name="gripForce" type="xs:decimal" minOccurs="0"/>
+            <xs:element name="targetHeight" type="xs:decimal"/>
         </xs:sequence>
     </xs:complexType>
 
-    <!-- Complex type for takeAmbientTemperature -->
-    <xs:complexType name="takeAmbientTemperatureType">
+    <!-- Complex type for placeObject -->
+    <xs:complexType name="placeObjectType">
         <xs:sequence>
-            <xs:element name="numberOfSamples" type="xs:integer"/>
+            <xs:element name="releaseForce" type="xs:decimal" minOccurs="0"/>
+            <xs:element name="targetHeight" type="xs:decimal"/>
         </xs:sequence>
     </xs:complexType>
 
-    <!-- Complex type for takeCO2Reading -->
-    <xs:complexType name="takeCO2ReadingType">
+    <!-- Complex type for nextBestView -->
+    <xs:complexType name="identifyObjectType">
         <xs:sequence>
-            <xs:element name="numberOfSamples" type="xs:integer"/>
+            <xs:element name="name" type="xs:string"/>
         </xs:sequence>
     </xs:complexType>
 
-    <!-- Complex type for moveToLocation -->
-    <xs:complexType name="moveToLocationType">
+    <!-- Complex type for nextBestView -->
+    <xs:complexType name="nextBestViewType">
         <xs:sequence>
-            <xs:element name="Latitude" type="xs:decimal"/>
-            <xs:element name="Longitude" type="xs:decimal"/>
+            <xs:element name="name" type="xs:string"/>
+            <xs:element name="resolution" type="xs:string"/>
+            <xs:element name="fieldOfView" type="xs:decimal"/>
         </xs:sequence>
     </xs:complexType>
 
-    <!-- Complex type for robotActions -->
-    <xs:complexType name="robotActions">
+    <!-- Complex type for nextBestView -->
+    <xs:complexType name="storePointCloudType">
         <xs:sequence>
-            <xs:element name="ActionType" type="robotActionTypes"/>
+            <xs:element name="samples" type="xs:integer"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Complex type for manipulatorActions -->
+    <xs:complexType name="manipulatorActions">
+        <xs:sequence>
+            <xs:element name="ActionType" type="manipulatorActionTypes"/>
             <xs:choice>
-                <xs:element name="takeThermalPicture" type="takeThermalPictureType"/>
-                <xs:element name="takeAmbientTemperature" type="takeAmbientTemperatureType"/>
-                <xs:element name="takeCO2Reading" type="takeCO2ReadingType"/>
-                <xs:element name="moveToLocation" type="moveToLocationType"/>
+                <xs:element name="pickObject" type="pickObjectType"/>
+                <xs:element name="placeObject" type="placeObjectType"/>
+                <xs:element name="identifyObject" type="identifyObjectType"/>
+                <xs:element name="nextBestView" type="nextBestViewType"/>
+                <xs:element name="storePointCloud" type="storePointCloudType"/>
             </xs:choice>
         </xs:sequence>
     </xs:complexType>
@@ -112,11 +125,7 @@
     <!-- Simple type for Condition Types -->
     <xs:simpleType name="stateTypes">
         <xs:restriction base="xs:string">
-            <xs:enumeration value="atStartingPoint"/>
-            <xs:enumeration value="atEndPoint"/>
-            <xs:enumeration value="batteryFull"/>
-            <xs:enumeration value="batteryCharging"/>
-            <xs:enumeration value="batteryLow"/>
+            <xs:enumeration value="atOrigin"/>
         </xs:restriction>
     </xs:simpleType>
 
@@ -143,7 +152,7 @@
                         <xs:element name="TaskID" type="xs:string"/>
                         <xs:element name="TaskDescription" type="xs:string"/>
                         <xs:element name="StateVariables" type="StateVariablesType" minOccurs="0"/>
-                        <xs:element name="Action" type="robotActions" minOccurs="0" maxOccurs="1"/>
+                        <xs:element name="Action" type="manipulatorActions" minOccurs="0" maxOccurs="1"/>
                         <xs:element name="Parameters" type="ParametersType"/>
                         <xs:element name="Preconditions" type="PreconditionsType" minOccurs="0"/>
                     </xs:sequence>
@@ -178,9 +187,17 @@
         </xs:sequence>
     </xs:complexType>
 
+    <!-- Ensuring ConditionalAction must be preceded by a TaskID -->
+    <xs:complexType name="SequenceType">
+        <xs:sequence>
+            <xs:element name="TaskID" type="xs:string" maxOccurs="unbounded"/>
+            <xs:element name="ConditionalActions" type="ConditionalActionsType" maxOccurs="unbounded" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
     <xs:complexType name="ActionSequenceType">
         <xs:sequence>
-            <xs:element name="Sequence" type="ConditionalSequenceType" minOccurs="1" maxOccurs="unbounded"/>
+            <xs:element name="Sequence" type="SequenceType" minOccurs="1" maxOccurs="unbounded"/>
         </xs:sequence>
     </xs:complexType>    
 

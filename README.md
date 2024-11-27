@@ -2,9 +2,11 @@
 [![github](https://img.shields.io/badge/GitHub-ucmercedrobotics-181717.svg?style=flat&logo=github)](https://github.com/ucmercedrobotics)
 [![website](https://img.shields.io/badge/Website-UCMRobotics-5087B2.svg?style=flat&logo=telegram)](https://robotics.ucmerced.edu/)
 [![python](https://img.shields.io/badge/Python-3.11-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
+[![pre-commits](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Checked with mypy](http://www.mypy-lang.org/static/mypy_badge.svg)](http://mypy-lang.org/)
-[![pydocstyle](https://img.shields.io/badge/pydocstyle-enabled-AD4CD3)](http://www.pydocstyle.org/en/stable/)
+<!-- TODO: work to enable pydocstyle -->
+<!-- [![pydocstyle](https://img.shields.io/badge/pydocstyle-enabled-AD4CD3)](http://www.pydocstyle.org/en/stable/) -->
 
 <!-- [![arXiv](https://img.shields.io/badge/arXiv-2409.04653-b31b1b.svg)](https://arxiv.org/abs/2409.04653) -->
 
@@ -37,7 +39,7 @@ $ make server
 nc -l 0.0.0.0 12345
 ...
 ```
-Make sure to run this **first** before running the mission planner (`make run`). 
+Make sure to run this **first** before running the mission planner (`make run`).
 
 ### Example Execution:
 On the host machine running a listening server. Make sure the IP/port matches the YAML config file IP/port:
@@ -50,7 +52,7 @@ nc -l 0.0.0.0 12345
 ```bash
 $ make build-image
 docker build . -t gpt-mission-planner --target local
-...    
+...
 ...
 
 $ make bash

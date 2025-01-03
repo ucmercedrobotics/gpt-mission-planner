@@ -28,7 +28,7 @@
             <xs:enumeration value="placeObject"/>
             <xs:enumeration value="identifyObject"/>
             <xs:enumeration value="nextBestView"/>
-            <xs:enumeration value="storePointCloud"/>
+            <xs:enumeration value="goToLocation"/>
             <!-- TODO: I think there needs to be something here a bit higher level to identify object? -->
         </xs:restriction>
     </xs:simpleType>
@@ -37,7 +37,6 @@
     <xs:complexType name="pickObjectType">
         <xs:sequence>
             <xs:element name="gripForce" type="xs:decimal" minOccurs="0"/>
-            <xs:element name="targetHeight" type="xs:decimal"/>
         </xs:sequence>
     </xs:complexType>
 
@@ -45,30 +44,33 @@
     <xs:complexType name="placeObjectType">
         <xs:sequence>
             <xs:element name="releaseForce" type="xs:decimal" minOccurs="0"/>
-            <xs:element name="targetHeight" type="xs:decimal"/>
         </xs:sequence>
     </xs:complexType>
 
-    <!-- Complex type for nextBestView -->
+    <!-- Complex type for object segmentation -->
     <xs:complexType name="identifyObjectType">
         <xs:sequence>
+            <!-- object characteristics -->
             <xs:element name="name" type="xs:string"/>
+            <xs:element name="color" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
         </xs:sequence>
     </xs:complexType>
 
     <!-- Complex type for nextBestView -->
     <xs:complexType name="nextBestViewType">
         <xs:sequence>
-            <xs:element name="name" type="xs:string"/>
-            <xs:element name="resolution" type="xs:string"/>
-            <xs:element name="fieldOfView" type="xs:decimal"/>
+            <!-- quality of digital twin on a scale from 1-10 -->
+            <xs:element name="resolution" type="xs:integer"/>
         </xs:sequence>
     </xs:complexType>
 
-    <!-- Complex type for nextBestView -->
-    <xs:complexType name="storePointCloudType">
+    <!-- Complex type for moving to a relative location -->
+    <xs:complexType name="goToLocationType">
         <xs:sequence>
-            <xs:element name="samples" type="xs:integer"/>
+            <!-- meters in all directions -->
+            <xs:element name="x" type="xs:decimal"/>
+            <xs:element name="y" type="xs:decimal"/>
+            <xs:element name="z" type="xs:decimal"/>
         </xs:sequence>
     </xs:complexType>
 
@@ -81,7 +83,7 @@
                 <xs:element name="placeObject" type="placeObjectType"/>
                 <xs:element name="identifyObject" type="identifyObjectType"/>
                 <xs:element name="nextBestView" type="nextBestViewType"/>
-                <xs:element name="storePointCloud" type="storePointCloudType"/>
+                <xs:element name="goToLocation" type="goToLocationType"/>
             </xs:choice>
         </xs:sequence>
     </xs:complexType>
@@ -199,7 +201,7 @@
         <xs:sequence>
             <xs:element name="Sequence" type="SequenceType" minOccurs="1" maxOccurs="unbounded"/>
         </xs:sequence>
-    </xs:complexType>    
+    </xs:complexType>
 
     <!-- TODO: unused for now are the below complexTypes. -->
 

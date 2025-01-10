@@ -10,6 +10,11 @@
 
 <!-- [![arXiv](https://img.shields.io/badge/arXiv-2409.04653-b31b1b.svg)](https://arxiv.org/abs/2409.04653) -->
 
+Make sure you initialize the repo with pre-commit hooks:
+```bash
+make repo-init
+```
+
 ## How To Run GPT Mission Planner
 ### GPT Token
 Create a file at `~/.gpt/token.env` and add your token in environment variable structure:

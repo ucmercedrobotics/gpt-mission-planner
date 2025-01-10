@@ -3,7 +3,7 @@ REPO_NAME := gpt-mission-planner
 CONFIG := ./app/config/localhost.yaml
 
 repo-init:
-	python3.11 -m pip install pre-commit==3.4.0 && \
+	python3 -m pip install pre-commit==3.4.0 && \
 	pre-commit install
 
 build-image:

@@ -1,8 +1,9 @@
 CONTAINER_NAME := gpt-mission-planner
 REPO_NAME := gpt-mission-planner
+CONFIG := ./app/config/localhost.yaml
 
 repo-init:
-	python3.11 -m pip install black pre-commit mypy && \
+	python3.11 -m pip install pre-commit==3.4.0 && \
 	pre-commit install
 
 build-image:
@@ -19,7 +20,7 @@ bash:
 	/bin/bash
 
 run:
-	python3 ./app/mission_planner.py
+	python3 ./app/mission_planner.py --config ${CONFIG}
 
 server:
 	nc -l 0.0.0.0 12345

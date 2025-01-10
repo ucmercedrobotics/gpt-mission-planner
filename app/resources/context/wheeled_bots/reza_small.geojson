@@ -1,4 +1,5 @@
 {
+  "_comment" : "This is the GeoJSON for which you must generate mission plan XML documents. This is our orchard:",
   "type": "FeatureCollection",
   "features": [
     {

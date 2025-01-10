@@ -15,7 +15,7 @@ class MissionPlanner:
         self,
         token_path: str,
         schema_path: str,
-        farm_layout: str,
+        context_files: list[str],
         max_retries: int,
         max_tokens: int,
         temperature: float,
@@ -26,7 +26,7 @@ class MissionPlanner:
         self.logger: logging.Logger = logger
         # set schema and farm file paths
         self.schema_path: str = schema_path
-        self.farm_layout: str = farm_layout
+        self.context_files: list[str] = context_files
         # logging GPT output folder
         self.log_directory: str = log_directory
         # max number of times that GPT can try and fix the mission plan
@@ -35,7 +35,7 @@ class MissionPlanner:
         self.gpt: GPTInterface = GPTInterface(
             self.logger, token_path, max_tokens, temperature
         )
-        self.gpt.init_context(self.schema_path, self.farm_layout)
+        self.gpt.init_context(self.schema_path, self.context_files)
 
     def configure_network(self, host: str, port: int) -> None:
         # network interface
@@ -130,15 +130,22 @@ def main(config: str):
     with open(config, "r") as file:
         config_yaml: dict = yaml.safe_load(file)
 
+    context_files: list[str] = []
+
     try:
         # configure logger
         logging.basicConfig(level=logging._nameToLevel[config_yaml["logging"]])
         logger: logging.Logger = logging.getLogger()
 
+        if "context_files" in config_yaml:
+            context_files = config_yaml["context_files"]
+        else:
+            logger.info("No additional context files found. Proceeding...")
+
         mp: MissionPlanner = MissionPlanner(
             config_yaml["token"],
             config_yaml["schema"],
-            config_yaml["farm_layout"],
+            context_files,
             config_yaml["max_retries"],
             config_yaml["max_tokens"],
             config_yaml["temperature"],

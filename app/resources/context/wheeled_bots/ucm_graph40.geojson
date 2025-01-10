@@ -1,3 +1,4 @@
+{"_comment" : "This is the GeoJSON for which you must generate mission plan XML documents. This is our orchard:"}
 {"type": "Feature", "properties": {"id": 0, "action": 0, "reward": 0.0}, "geometry": {"type": "Point", "coordinates": [-120.42298277318592, 37.36632162352893]}}
 {"type": "Feature", "properties": {"id": 1, "action": 0, "reward": 0.025926231827891333}, "geometry": {"type": "Point", "coordinates": [-120.4230380189676, 37.36626983244727]}}
 {"type": "Feature", "properties": {"id": 2, "action": 0, "reward": 0.5496624778787091}, "geometry": {"type": "Point", "coordinates": [-120.42299114487176, 37.36632936985608]}}

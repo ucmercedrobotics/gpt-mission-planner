@@ -8,7 +8,8 @@ temperature: 0.2
 # schema per 1872.1-2024 + farm layout
 log_directory: "./app/gpt_outputs/"
 schema: "./app/resources/context/wheeled_bots/schema.xsd"
-farm_layout: "./app/resources/context/wheeled_bots/reza20.geojson"
+context_files:
+  - "./app/resources/context/wheeled_bots/reza20.geojson"
 # who to send this too?
 host: 127.0.0.1
 port: 12345

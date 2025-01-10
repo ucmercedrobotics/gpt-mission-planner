@@ -23,9 +23,9 @@ class GPTInterface:
         # binding GPT client
         self.client: OpenAI = OpenAI()
 
-    def init_context(self, schema_path: str, farm_layout_path: str):
+    def init_context(self, schema_path: str, context_files: list[str]):
+        # all robots must come with a schema
         self._set_schema(schema_path)
-        self._set_farm_layout(farm_layout_path)
 
         # default context
         self.context: list = [
@@ -33,11 +33,10 @@ class GPTInterface:
                 "role": "system",
                 "content": "You are a mission planner that generates navigational XML mission plans based on robotic task representation. \
                             When asked to generate a mission, create an XML file conformant to the known schema and \
-                            use the GeoJSON file to provide references in the mission plan for things such as GPS location, tree type, etc. \
-                            In order to accomplish most actions, you must first drive to the location. \
-                            Therefore, tasks should almost always require driving to a tree and then doing an action unless doing multiple actions at the same tree. \
-                            Place the original question in the TaskDescription element of the CompositeTaskInformation element for logging. \
-                            If possible, comment the total estimated haversine distance traveled from start to end somewhere in the Outcome, but don't show how you computed it.",
+                            use the context files to provide references in the mission plan for how the robot tasked with this mission should go about doing it. \
+                            Within the context files you'll find information that should enable you to determine how the mission should operate. \
+                            If not, simply state that the mission is unachieveable and requires more information. \
+                            Place the original question in the TaskDescription element of the CompositeTaskInformation element for logging.",
             },
             # context
             {
@@ -46,22 +45,11 @@ class GPTInterface:
                             The mission must be syntactically correct and validate using an XML linter: "
                 + self.schema,
             },
-            {
-                "role": "assistant",
-                "content": "If you have any specific questions or modifications you'd like to discuss regarding this schema, feel free to ask!",
-            },
-            {
-                "role": "user",
-                "content": "This is the GeoJSON for which you must generate mission plan XML documents. This is our orchard: "
-                + self.farm_layout,
-            },
-            {
-                "role": "assistant",
-                "content": "Thank you for providing the GeoJSON file. \
-                            I'll assist you in creating the XML file for your robotic mission plan when you provide your mission.",
-            },
-            # TODO: add context of farm layout so that machine can generate XML with relevant state information
         ]
+
+        # this could be empty
+        if len(context_files) > 0:
+            self.context += self._add_additional_context_files(context_files)
 
         self.initial_context_length = len(self.context)
 
@@ -100,7 +88,18 @@ class GPTInterface:
         with open(schema_path, "r") as file:
             self.schema = file.read()
 
-    def _set_farm_layout(self, farm_layout_path: str) -> None:
-        # Read XSD from 1872.1-2024
-        with open(farm_layout_path, "r") as file:
-            self.farm_layout = file.read()
+    def _add_additional_context_files(self, context_files: list[str]) -> list[dict]:
+        context_list: list[dict] = []
+        for c in context_files:
+            with open(c, "r") as file:
+                extra = file.read()
+            context_list.append(
+                {
+                    "role": "user",
+                    "content": "Use this additional file to provide context when generating XML mission plans. \
+                            The content within should be self explanatory: "
+                    + extra,
+                }
+            )
+
+        return context_list

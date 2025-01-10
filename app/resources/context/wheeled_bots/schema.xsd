@@ -31,6 +31,17 @@
         </xs:restriction>
     </xs:simpleType>
 
+    <xs:simpleType name="comparisonType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="lt"/>
+            <xs:enumeration value="lte"/>
+            <xs:enumeration value="gt"/>
+            <xs:enumeration value="gte"/>
+            <xs:enumeration value="eq"/>
+            <xs:enumeration value="neq"/>
+        </xs:restriction>
+    </xs:simpleType>
+
     <!-- Complex type for takeThermalPicture -->
     <xs:complexType name="takeThermalPictureType">
         <xs:sequence>
@@ -156,15 +167,20 @@
      <!-- TODO: update this to incorporate the precondition type, maybe, or add a new type for conditionals -->
     <xs:complexType name="ConditionalType">
         <xs:sequence>
-            <xs:element name="ConditionalExpression" type="xs:string"/>
+            <xs:element name="Comparator" type="comparisonType" minOccurs="1" maxOccurs="1"/>
+            <xs:choice minOccurs="1" maxOccurs="1">
+                <xs:element name="HardValue" type="xs:double"/>
+                <!-- TODO: implement this in ROS -->
+                <xs:element name="AbstractValue" type="xs:string"/>
+            </xs:choice>
         </xs:sequence>
     </xs:complexType>
 
     <!-- ConditionalAction type -->
     <xs:complexType name="ConditionalActionsType">
         <xs:sequence>
-            <xs:element name="Conditional" type="ConditionalType" minOccurs="0" maxOccurs="1"/>
-            <xs:element name="Sequence" type="ConditionalSequenceType" minOccurs="0" maxOccurs="1"/>
+            <xs:element name="Conditional" type="ConditionalType" minOccurs="1" maxOccurs="unbounded"/>
+            <xs:element name="Sequence" type="ConditionalSequenceType" minOccurs="1" maxOccurs="1"/>
         </xs:sequence>
     </xs:complexType>
 
@@ -173,24 +189,16 @@
         <xs:sequence>
             <xs:choice maxOccurs="unbounded">
                 <xs:element name="TaskID" type="xs:string"/>
-                <xs:element name="ConditionalActions" type="ConditionalActionsType"/>
+                <xs:element name="ConditionalActions" type="ConditionalActionsType" minOccurs="0" maxOccurs="2"/>
             </xs:choice>
-        </xs:sequence>
-    </xs:complexType>
-
-    <!-- Ensuring ConditionalAction must be preceded by a TaskID -->
-    <xs:complexType name="SequenceType">
-        <xs:sequence>
-            <xs:element name="TaskID" type="xs:string" maxOccurs="unbounded"/>
-            <xs:element name="ConditionalActions" type="ConditionalActionsType" maxOccurs="unbounded" minOccurs="0"/>
         </xs:sequence>
     </xs:complexType>
 
     <xs:complexType name="ActionSequenceType">
         <xs:sequence>
-            <xs:element name="Sequence" type="SequenceType" minOccurs="1" maxOccurs="unbounded"/>
+            <xs:element name="Sequence" type="ConditionalSequenceType" minOccurs="1" maxOccurs="unbounded"/>
         </xs:sequence>
-    </xs:complexType>    
+    </xs:complexType>
 
     <!-- TODO: unused for now are the below complexTypes. -->
 

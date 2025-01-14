@@ -4,6 +4,8 @@
            xmlns="https://robotics.ucmerced.edu/task"
            elementFormDefault="qualified">
 
+    <!-- Schema defining a ClearPath Husky 4 wheeled robot -->
+
     <!-- Root element for the task -->
     <xs:element name="TaskTemplate">
         <xs:complexType>

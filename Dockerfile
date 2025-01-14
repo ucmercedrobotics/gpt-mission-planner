@@ -33,13 +33,7 @@ USER appuser
 # image for running with a GPU: LINUX ONLY
 FROM base AS local
 
-ARG UID
-ARG GID
-
 # copy over all python files from builder stage and add location to path
 COPY --from=builder /usr/local /usr/local
 
 WORKDIR /gpt-mission-planner
-
-RUN adduser -u ${UID} --disabled-password --gecos "" appuser && chown -R appuser /gpt-mission-planner
-USER appuser

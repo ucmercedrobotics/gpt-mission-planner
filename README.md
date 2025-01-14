@@ -19,7 +19,7 @@ make repo-init
 ### GPT Token
 Create a file at `~/.gpt/token.env` and add your token in environment variable structure:
 ```bash
-OPENAI_API_TOKEN=<my_token_here>
+OPENAI_API_KEY=<my_token_here>
 ```
 
 ### Docker

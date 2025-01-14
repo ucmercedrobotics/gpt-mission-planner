@@ -21,9 +21,12 @@ class MissionPlanner:
         temperature: float,
         log_directory: str,
         logger: logging.Logger,
+        debug: bool,
     ):
         # logger instance
         self.logger: logging.Logger = logger
+        # debug mode
+        self.debug: bool = debug
         # set schema and farm file paths
         self.schema_path: str = schema_path
         self.context_files: list[str] = context_files
@@ -51,7 +54,9 @@ class MissionPlanner:
 
         return xml_response
 
-    def write_out_xml(self, mp_out: str) -> str:
+    def write_out_file(self, mp_out: str | None) -> str:
+        assert isinstance(mp_out, str)
+
         # Create a temporary file in the specified directory
         with tempfile.NamedTemporaryFile(
             dir=self.log_directory, delete=False, mode="w"
@@ -88,9 +93,11 @@ class MissionPlanner:
             # ask user for their mission plan
             mp_input: str = input("Enter the specifications for your mission plan: ")
             mp_out: str | None = self.gpt.ask_gpt(mp_input, True)
+            if self.debug:
+                self.write_out_file(mp_out)
             self.logger.debug(mp_out)
             mp_out = self.parse_xml(mp_out)
-            output_path = self.write_out_xml(mp_out)
+            output_path = self.write_out_file(mp_out)
             self.logger.debug(f"GPT output written to {output_path}...")
             ret, e = self.validate_output(output_path)
 
@@ -102,7 +109,7 @@ class MissionPlanner:
                     )
                     mp_out = self.gpt.ask_gpt(e, True)
                     mp_out = self.parse_xml(mp_out)
-                    output_path = self.write_out_xml(mp_out)
+                    output_path = self.write_out_file(mp_out)
                     self.logger.debug(f"Temp GPT output written to {output_path}...")
                     ret, e = self.validate_output(output_path)
                     retry += 1
@@ -151,6 +158,7 @@ def main(config: str):
             config_yaml["temperature"],
             config_yaml["log_directory"],
             logger,
+            config_yaml["debug"],
         )
         mp.configure_network(config_yaml["host"], int(config_yaml["port"]))
     except yaml.YAMLError as exc:

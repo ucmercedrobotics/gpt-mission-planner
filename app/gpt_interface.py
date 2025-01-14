@@ -30,7 +30,7 @@ class GPTInterface:
         # default context
         self.context: list = [
             {
-                "role": "system",
+                "role": "user",
                 "content": "You are a mission planner that generates navigational XML mission plans based on robotic task representation. \
                             When asked to generate a mission, create an XML file conformant to the known schema and \
                             use the context files to provide references in the mission plan for how the robot tasked with this mission should go about doing it. \
@@ -38,10 +38,16 @@ class GPTInterface:
                             If not, simply state that the mission is unachieveable and requires more information. \
                             Place the original question in the TaskDescription element of the CompositeTaskInformation element for logging.",
             },
+            {
+                "role": "user",
+                "content": "Your focus is in a precision agriculture setting. \
+                            All of the prompts you will receive should return answers with the domain of precision ag.",
+            },
             # context
             {
                 "role": "user",
                 "content": "This is the schema for which you must generate mission plan XML documents. \
+                            It is critical that the XML validates against the schema. \
                             The mission must be syntactically correct and validate using an XML linter: "
                 + self.schema,
             },
@@ -70,10 +76,11 @@ class GPTInterface:
         message.append({"role": "user", "content": prompt})
 
         completion: ChatCompletion = self.client.chat.completions.create(
-            model="gpt-4o",
+            model="o1-mini",
             messages=message,
-            max_tokens=self.max_tokens,
-            temperature=self.temperature,
+            max_completion_tokens=self.max_tokens,
+            # NOTE: this has been deprecated in o1-mini
+            # temperature=self.temperature,
         )
 
         response: str | None = completion.choices[0].message.content

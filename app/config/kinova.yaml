@@ -1,12 +1,13 @@
+debug: false
 logging: DEBUG
 # OpenAI API token
 token: "~/.gpt/token.env"
 # max number of retries to get a valid mission plan from ChatGPT
-max_retries: 2
-max_tokens: 4000
+max_retries: 3
+max_tokens: 4096
 temperature: 0.2
 # schema per 1872.1-2024 + farm layout
-log_directory: "./app/gpt_outputs/"
+log_directory: "./app/gpt_outputs/kinova_experiments"
 schema: "./app/resources/context/manipulator/kinova_schema.xsd"
 # who to send this too?
 host: 127.0.0.1

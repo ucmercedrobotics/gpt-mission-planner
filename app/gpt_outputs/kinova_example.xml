@@ -1,52 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <TaskTemplate xmlns="https://robotics.ucmerced.edu/task">
     <CompositeTaskInformation>
-        <TaskID>task_001</TaskID>
-        <TaskDescription>Identify a red plant. If detected, take a next-best-view image; otherwise, identify a red cup. Finally, return to the origin point.</TaskDescription>
+        <TaskID>Task001</TaskID>
+        <TaskDescription>could you turn around and look for the red cup? if you don't find it, turn back around</TaskDescription>
     </CompositeTaskInformation>
-    <Preconditions>
-        <Precondition>
-            <Condition>atOrigin</Condition>
-        </Precondition>
-    </Preconditions>
     <AtomicTasks>
+        <!-- Atomic Task 1: Turn Around -->
         <AtomicTask>
-            <TaskID>identify_red_plant</TaskID>
-            <TaskDescription>Identify a red plant in the environment.</TaskDescription>
-            <Action>
-                <ActionType>identifyObject</ActionType>
-                <identifyObject>
-                    <objectName>plant</objectName>
-                    <objectColor>red</objectColor>
-                </identifyObject>
-            </Action>
-            <Parameters/>
-        </AtomicTask>
-        <AtomicTask>
-            <TaskID>next_best_view_image</TaskID>
-            <TaskDescription>Take a next-best-view image of the identified red plant.</TaskDescription>
-            <Action>
-                <ActionType>nextBestView</ActionType>
-                <nextBestView>
-                    <resolution>8</resolution>
-                </nextBestView>
-            </Action>
-            <Parameters/>
-        </AtomicTask>
-        <AtomicTask>
-            <TaskID>identify_red_cup</TaskID>
-            <TaskDescription>Identify a red cup in the environment.</TaskDescription>
-            <Action>
-                <ActionType>identifyObject</ActionType>
-                <identifyObject>
-                    <objectName>cup</objectName>
-                    <objectColor>red</objectColor>
-                </identifyObject>
-            </Action>
-            <Parameters/>
-        </AtomicTask>
-        <AtomicTask>
-            <TaskID>return_to_origin</TaskID>
-            <TaskDescription>Return to the origin point.</TaskDescription>
+            <TaskID>Task001.1</TaskID>
+            <TaskDescription>Turn around 180 degrees</TaskDescription>
             <Action>
                 <ActionType>goToPosition</ActionType>
                 <goToPosition>
@@ -55,40 +17,63 @@
                     <z>0.0</z>
                     <roll>0.0</roll>
                     <pitch>0.0</pitch>
-                    <yaw>0.0</yaw>
+                    <yaw>3.1416</yaw> <!-- 180 degrees in radians -->
                 </goToPosition>
             </Action>
-            <Parameters/>
+            <Parameters>
+                <!-- Add any necessary parameters here -->
+            </Parameters>
+        </AtomicTask>
+
+        <!-- Atomic Task 2: Look for the Red Cup -->
+        <AtomicTask>
+            <TaskID>Task001.2</TaskID>
+            <TaskDescription>Identify the red cup</TaskDescription>
+            <Action>
+                <ActionType>identifyObject</ActionType>
+                <identifyObject>
+                    <objectName>cup</objectName>
+                    <objectColor>red</objectColor>
+                </identifyObject>
+            </Action>
+            <Parameters>
+                <!-- Add any necessary parameters here -->
+            </Parameters>
+        </AtomicTask>
+
+        <!-- Atomic Task 3: Turn Back if Not Found -->
+        <AtomicTask>
+            <TaskID>Task001.3</TaskID>
+            <TaskDescription>Turn back around if red cup not found</TaskDescription>
+            <Action>
+                <ActionType>goToPosition</ActionType>
+                <goToPosition>
+                    <x>0.0</x>
+                    <y>0.0</y>
+                    <z>0.0</z>
+                    <roll>0.0</roll>
+                    <pitch>0.0</pitch>
+                    <yaw>-3.1416</yaw> <!-- -180 degrees in radians to turn back -->
+                </goToPosition>
+            </Action>
+            <Parameters>
+                <!-- Add any necessary parameters here -->
+            </Parameters>
         </AtomicTask>
     </AtomicTasks>
     <ActionSequence>
         <Sequence>
-            <TaskID>identify_red_plant</TaskID>
+            <TaskID>Task001.1</TaskID>
+            <TaskID>Task001.2</TaskID>
             <ConditionalActions>
                 <Conditional>
-                    <ReturnStatus>true</ReturnStatus>
+                    <ReturnStatus>false</ReturnStatus> <!-- Condition: Red cup not found -->
                 </Conditional>
                 <Sequence>
-                    <TaskID>next_best_view_image</TaskID>
+                    <TaskID>Task001.3</TaskID>
                 </Sequence>
             </ConditionalActions>
-            <ConditionalActions>
-                <Conditional>
-                    <ReturnStatus>false</ReturnStatus>
-                </Conditional>
-                <Sequence>
-                    <TaskID>identify_red_cup</TaskID>
-                </Sequence>
-            </ConditionalActions>
-            <TaskID>return_to_origin</TaskID>
         </Sequence>
     </ActionSequence>
-    <Outcome>
-        <State>atOrigin</State>
-    </Outcome>
-    <Exits>
-        <Exit>
-            <Type>nominal</Type>
-        </Exit>
-    </Exits>
+    <!-- Optional Outcome and Exits can be added here if needed -->
 </TaskTemplate>

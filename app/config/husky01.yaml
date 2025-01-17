@@ -5,9 +5,10 @@ token: "~/.gpt/token.env"
 # max number of retries to get a valid mission plan from ChatGPT
 max_retries: 1
 max_tokens: 2000
-# schema per 1872.1-2024 + farm layout
 log_directory: "./app/gpt_outputs/"
-schema: "./app/resources/context/wheeled_bots/schema.xsd"
+# schema per 1872.1-2024 + farm layout
+schema:
+  - "./app/resources/context/wheeled_bots/schema.xsd"
 context_files:
   - "./app/resources/context/wheeled_bots/reza_small.geojson"
 # who to send this too?

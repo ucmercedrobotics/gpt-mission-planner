@@ -6,9 +6,10 @@ token: "~/.gpt/token.env"
 max_retries: 2
 max_tokens: 4000
 temperature: 0.2
-# schema per 1872.1-2024 + farm layout
 log_directory: "./app/gpt_outputs/"
-schema: "./app/resources/context/wheeled_bots/schema.xsd"
+# schema per 1872.1-2024 + farm layout
+schema:
+  - "./app/resources/context/wheeled_bots/schema.xsd"
 context_files:
   - "./app/resources/context/wheeled_bots/reza20.geojson"
 # who to send this too?

@@ -22,17 +22,20 @@ class GPTInterface:
         load_dotenv(token_path)
         # binding GPT client
         self.client: OpenAI = OpenAI()
+        # schema text
+        self.schemas: str = ""
 
-    def init_context(self, schema_path: str, context_files: list[str]):
-        # all robots must come with a schema
-        self._set_schema(schema_path)
+    def init_context(self, schema_path: list[str], context_files: list[str]):
+        for s in schema_path:
+            # all robots must come with a schema
+            self._set_schema(s)
 
         # default context
         self.context: list = [
             {
                 "role": "user",
                 "content": "You are a mission planner that generates navigational XML mission plans based on robotic task representation. \
-                            When asked to generate a mission, create an XML file conformant to the known schema and \
+                            When asked to generate a mission, select the appropriate schema to generate an XML mission and \
                             use the context files to provide references in the mission plan for how the robot tasked with this mission should go about doing it. \
                             Within the context files you'll find information that should enable you to determine how the mission should operate. \
                             If not, simply state that the mission is unachieveable and requires more information. \
@@ -46,10 +49,11 @@ class GPTInterface:
             # context
             {
                 "role": "user",
-                "content": "This is the schema for which you must generate mission plan XML documents. \
-                            It is critical that the XML validates against the schema. \
+                "content": "Here are the list of schemas that represent that available robots you have to accomplish your mission. \
+                            You should remember you can only assign one robot to accomplish the task. \
+                            It is critical that the XML validates against the schema and that the schema location attribute is included. \
                             The mission must be syntactically correct and validate using an XML linter: "
-                + self.schema,
+                + self.schemas,
             },
         ]
 
@@ -93,7 +97,12 @@ class GPTInterface:
     def _set_schema(self, schema_path: str) -> None:
         # Read XSD from 1872.1-2024
         with open(schema_path, "r") as file:
-            self.schema = file.read()
+            self.schemas += file.read()
+
+        self.schemas += "\nThis schema is located at path: " + schema_path
+
+        # deliniate for chatgpt
+        self.schemas += "\nnext schema: "
 
     def _add_additional_context_files(self, context_files: list[str]) -> list[dict]:
         context_list: list[dict] = []

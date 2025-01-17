@@ -1,20 +1,19 @@
-from typing import Tuple
 import logging
 import tempfile
 
 import click
-from lxml import etree
 import yaml
 
 from gpt_interface import GPTInterface
 from network_interface import NetworkInterface
+from xml_helper import parse_schema_location, parse_xml, validate_output
 
 
 class MissionPlanner:
     def __init__(
         self,
         token_path: str,
-        schema_path: str,
+        schema_paths: list[str],
         context_files: list[str],
         max_retries: int,
         max_tokens: int,
@@ -28,7 +27,7 @@ class MissionPlanner:
         # debug mode
         self.debug: bool = debug
         # set schema and farm file paths
-        self.schema_path: str = schema_path
+        self.schema_paths: list[str] = schema_paths
         self.context_files: list[str] = context_files
         # logging GPT output folder
         self.log_directory: str = log_directory
@@ -38,7 +37,7 @@ class MissionPlanner:
         self.gpt: GPTInterface = GPTInterface(
             self.logger, token_path, max_tokens, temperature
         )
-        self.gpt.init_context(self.schema_path, self.context_files)
+        self.gpt.init_context(self.schema_paths, self.context_files)
 
     def configure_network(self, host: str, port: int) -> None:
         # network interface
@@ -46,60 +45,25 @@ class MissionPlanner:
         # start connection to ROS agent
         self.nic.init_socket()
 
-    def parse_xml(self, mp_out: str | None) -> str:
-        assert isinstance(mp_out, str)
-
-        xml_response: str = mp_out.split("```xml\n")[1]
-        xml_response = xml_response.split("```")[0]
-
-        return xml_response
-
-    def write_out_file(self, mp_out: str | None) -> str:
-        assert isinstance(mp_out, str)
-
-        # Create a temporary file in the specified directory
-        with tempfile.NamedTemporaryFile(
-            dir=self.log_directory, delete=False, mode="w"
-        ) as temp_file:
-            temp_file.write(mp_out)
-            # name of temp file output
-            temp_file_name = temp_file.name
-
-        return temp_file_name
-
-    def validate_output(self, xml_file: str) -> Tuple[bool, str]:
-        try:
-            # Parse the XSD file
-            with open(self.schema_path, "rb") as schema_file:
-                schema_root = etree.XML(schema_file.read())
-            schema = etree.XMLSchema(schema_root)
-
-            # Parse the XML file
-            with open(xml_file, "rb") as fp:
-                xml_doc = etree.parse(fp)
-
-            # Validate the XML file against the XSD schema
-            schema.assertValid(xml_doc)
-            self.logger.debug("XML input from ChatGPT has been validated...")
-            return True, "XML is valid."
-
-        except etree.XMLSchemaError as e:
-            return False, "XML is invalid: " + str(e)
-        except Exception as e:
-            return False, "An error occurred: " + str(e)
-
     def run(self) -> None:
         while True:
             # ask user for their mission plan
             mp_input: str = input("Enter the specifications for your mission plan: ")
+            # ask mission with relevant context
             mp_out: str | None = self.gpt.ask_gpt(mp_input, True)
+            # if you're in debug mode, write the whole answer, not just xml
             if self.debug:
-                self.write_out_file(mp_out)
-            self.logger.debug(mp_out)
-            mp_out = self.parse_xml(mp_out)
-            output_path = self.write_out_file(mp_out)
+                self._write_out_file(mp_out)
+                self.logger.debug(mp_out)
+            # XML should be formatted ```xml```
+            mp_out = parse_xml(mp_out)
+            # write to temp file
+            output_path = self._write_out_file(mp_out)
             self.logger.debug(f"GPT output written to {output_path}...")
-            ret, e = self.validate_output(output_path)
+            # path to selected schema based on xsi:schemaLocation
+            selected_schema: str = parse_schema_location(output_path)
+            ret, e = validate_output(selected_schema, output_path)
+            self.logger.debug(f"Schema selected by GPT: {selected_schema}")
 
             if not ret:
                 retry: int = 0
@@ -107,11 +71,15 @@ class MissionPlanner:
                     self.logger.debug(
                         f"Retrying after failed to validate GPT mission plan: {e}"
                     )
+                    # ask mission with relevant context
                     mp_out = self.gpt.ask_gpt(e, True)
-                    mp_out = self.parse_xml(mp_out)
-                    output_path = self.write_out_file(mp_out)
+                    # XML should be formatted ```xml```
+                    mp_out = parse_xml(mp_out)
+                    # write to temp file
+                    output_path = self._write_out_file(mp_out)
                     self.logger.debug(f"Temp GPT output written to {output_path}...")
-                    ret, e = self.validate_output(output_path)
+                    # validate mission based on XSD
+                    ret, e = validate_output(selected_schema, output_path)
                     retry += 1
             # TODO: should we do this after every mission plan or leave them in context?
             self.gpt.reset_context()
@@ -125,6 +93,19 @@ class MissionPlanner:
 
         # TODO: decide how the reuse flow works
         self.nic.close_socket()
+
+    def _write_out_file(self, mp_out: str | None) -> str:
+        assert isinstance(mp_out, str)
+
+        # Create a temporary file in the specified directory
+        with tempfile.NamedTemporaryFile(
+            dir=self.log_directory, delete=False, mode="w"
+        ) as temp_file:
+            temp_file.write(mp_out)
+            # name of temp file output
+            temp_file_name = temp_file.name
+
+        return temp_file_name
 
 
 @click.command()

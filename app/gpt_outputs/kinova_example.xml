@@ -1,79 +1,74 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<TaskTemplate xmlns="https://robotics.ucmerced.edu/task">
+<TaskTemplate xmlns="https://robotics.ucmerced.edu/task"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="https://robotics.ucmerced.edu/task ./app/resources/context/manipulator/kinova_schema.xsd">
     <CompositeTaskInformation>
-        <TaskID>Task001</TaskID>
-        <TaskDescription>could you turn around and look for the red cup? if you don't find it, turn back around</TaskDescription>
+        <TaskID>task1</TaskID>
+        <TaskDescription>using the kinova arm, could you turn around and look for the red cup? if you don't find it, turn back around</TaskDescription>
     </CompositeTaskInformation>
     <AtomicTasks>
-        <!-- Atomic Task 1: Turn Around -->
         <AtomicTask>
-            <TaskID>Task001.1</TaskID>
-            <TaskDescription>Turn around 180 degrees</TaskDescription>
+            <TaskID>task1_turn_around</TaskID>
+            <TaskDescription>Turn the arm around to initiate search</TaskDescription>
             <Action>
                 <ActionType>goToPosition</ActionType>
                 <goToPosition>
-                    <x>0.0</x>
-                    <y>0.0</y>
-                    <z>0.0</z>
-                    <roll>0.0</roll>
-                    <pitch>0.0</pitch>
+                    <x>0</x>
+                    <y>0</y>
+                    <z>0</z>
+                    <roll>0</roll>
+                    <pitch>0</pitch>
                     <yaw>3.1416</yaw> <!-- 180 degrees in radians -->
                 </goToPosition>
             </Action>
-            <Parameters>
-                <!-- Add any necessary parameters here -->
-            </Parameters>
         </AtomicTask>
-
-        <!-- Atomic Task 2: Look for the Red Cup -->
         <AtomicTask>
-            <TaskID>Task001.2</TaskID>
+            <TaskID>task1_look_for_red_cup</TaskID>
             <TaskDescription>Identify the red cup</TaskDescription>
             <Action>
                 <ActionType>identifyObject</ActionType>
                 <identifyObject>
-                    <objectName>cup</objectName>
+                    <objectName>red cup</objectName>
                     <objectColor>red</objectColor>
                 </identifyObject>
             </Action>
-            <Parameters>
-                <!-- Add any necessary parameters here -->
-            </Parameters>
         </AtomicTask>
-
-        <!-- Atomic Task 3: Turn Back if Not Found -->
         <AtomicTask>
-            <TaskID>Task001.3</TaskID>
-            <TaskDescription>Turn back around if red cup not found</TaskDescription>
+            <TaskID>task1_turn_back</TaskID>
+            <TaskDescription>Turn the arm back to original position</TaskDescription>
             <Action>
                 <ActionType>goToPosition</ActionType>
                 <goToPosition>
-                    <x>0.0</x>
-                    <y>0.0</y>
-                    <z>0.0</z>
-                    <roll>0.0</roll>
-                    <pitch>0.0</pitch>
-                    <yaw>-3.1416</yaw> <!-- -180 degrees in radians to turn back -->
+                    <x>0</x>
+                    <y>0</y>
+                    <z>0</z>
+                    <roll>0</roll>
+                    <pitch>0</pitch>
+                    <yaw>0</yaw>
                 </goToPosition>
             </Action>
-            <Parameters>
-                <!-- Add any necessary parameters here -->
-            </Parameters>
         </AtomicTask>
     </AtomicTasks>
     <ActionSequence>
         <Sequence>
-            <TaskID>Task001.1</TaskID>
-            <TaskID>Task001.2</TaskID>
+            <TaskID>task1_turn_around</TaskID>
+            <TaskID>task1_look_for_red_cup</TaskID>
             <ConditionalActions>
                 <Conditional>
-                    <ReturnStatus>false</ReturnStatus> <!-- Condition: Red cup not found -->
+                    <ReturnStatus>true</ReturnStatus>
                 </Conditional>
                 <Sequence>
-                    <TaskID>Task001.3</TaskID>
+                    <!-- Outcome if red cup is found: no further action -->
+                </Sequence>
+            </ConditionalActions>
+            <ConditionalActions>
+                <Conditional>
+                    <ReturnStatus>false</ReturnStatus>
+                </Conditional>
+                <Sequence>
+                    <TaskID>task1_turn_back</TaskID>
                 </Sequence>
             </ConditionalActions>
         </Sequence>
     </ActionSequence>
-    <!-- Optional Outcome and Exits can be added here if needed -->
 </TaskTemplate>

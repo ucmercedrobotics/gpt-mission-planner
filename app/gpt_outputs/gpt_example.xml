@@ -1,138 +1,66 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<TaskTemplate xmlns="https://robotics.ucmerced.edu/task" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://robotics.ucmerced.edu/task schema.xsd">
+<TaskTemplate xmlns="https://robotics.ucmerced.edu/task"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="https://robotics.ucmerced.edu/task ./app/resources/context/wheeled_bots/schema.xsd">
     <CompositeTaskInformation>
-        <TaskID>VisitAllTrees</TaskID>
-        <TaskDescription>Robot visits each tree in the orchard to capture thermal images.</TaskDescription>
+        <TaskID>Mission_001</TaskID>
+        <TaskDescription>drive over to the first tree and then take a temperature sensor. then come back home</TaskDescription>
     </CompositeTaskInformation>
-    <Preconditions>
-        <Precondition>
-            <Condition>atStartingPoint</Condition>
-        </Precondition>
-    </Preconditions>
+    <Preconditions/>
     <AtomicTasks>
-        <!-- Tasks for each tree -->
         <AtomicTask>
-            <TaskID>Tree1</TaskID>
-            <TaskDescription>Visit Tree 1 to capture thermal images</TaskDescription>
+            <TaskID>Task_1</TaskID>
+            <TaskDescription>Drive to the first pistachio tree</TaskDescription>
             <Action>
                 <ActionType>moveToLocation</ActionType>
                 <moveToLocation>
-                    <Latitude>37.26644394454138</Latitude>
-                    <Longitude>-120.4203310803755</Longitude>
+                    <Latitude>37.266406</Latitude>
+                    <Longitude>-120.4201625</Longitude>
                 </moveToLocation>
             </Action>
-            <Parameters />
+            <Parameters/>
+            <Preconditions/>
         </AtomicTask>
         <AtomicTask>
-            <TaskID>Tree1Action</TaskID>
-            <TaskDescription>Take thermal picture at Tree 1</TaskDescription>
+            <TaskID>Task_2</TaskID>
+            <TaskDescription>Take ambient temperature measurement</TaskDescription>
             <Action>
-                <ActionType>takeThermalPicture</ActionType>
-                <takeThermalPicture>
-                    <numberOfPictures>1</numberOfPictures>
-                </takeThermalPicture>
+                <ActionType>takeAmbientTemperature</ActionType>
+                <takeAmbientTemperature>
+                    <numberOfSamples>1</numberOfSamples>
+                </takeAmbientTemperature>
             </Action>
-            <Parameters />
+            <Parameters/>
+            <Preconditions/>
         </AtomicTask>
-        <!-- Repeat similar tasks for each tree in the orchard -->
-        <!-- Task 2 -->
         <AtomicTask>
-            <TaskID>Tree2</TaskID>
-            <TaskDescription>Visit Tree 2 to capture thermal images</TaskDescription>
+            <TaskID>Task_3</TaskID>
+            <TaskDescription>Return to home base</TaskDescription>
             <Action>
                 <ActionType>moveToLocation</ActionType>
                 <moveToLocation>
-                    <Latitude>37.26644335129713</Latitude>
-                    <Longitude>-120.4202818941467</Longitude>
+                    <Latitude>37.266444</Latitude>
+                    <Longitude>-120.4201616</Longitude>
                 </moveToLocation>
             </Action>
-            <Parameters />
+            <Parameters/>
+            <Preconditions/>
         </AtomicTask>
-        <AtomicTask>
-            <TaskID>Tree2Action</TaskID>
-            <TaskDescription>Take thermal picture at Tree 2</TaskDescription>
-            <Action>
-                <ActionType>takeThermalPicture</ActionType>
-                <takeThermalPicture>
-                    <numberOfPictures>1</numberOfPictures>
-                </takeThermalPicture>
-            </Action>
-            <Parameters />
-        </AtomicTask>
-        <!-- Continue for all trees similarly in the list -->
-        <!-- Task 3 -->
-        <AtomicTask>
-            <TaskID>Tree3</TaskID>
-            <TaskDescription>Visit Tree 3 to capture thermal images</TaskDescription>
-            <Action>
-                <ActionType>moveToLocation</ActionType>
-                <moveToLocation>
-                    <Latitude>37.26644397131992</Latitude>
-                    <Longitude>-120.4202351388289</Longitude>
-                </moveToLocation>
-            </Action>
-            <Parameters />
-        </AtomicTask>
-        <AtomicTask>
-            <TaskID>Tree3Action</TaskID>
-            <TaskDescription>Take thermal picture at Tree 3</TaskDescription>
-            <Action>
-                <ActionType>takeThermalPicture</ActionType>
-                <takeThermalPicture>
-                    <numberOfPictures>1</numberOfPictures>
-                </takeThermalPicture>
-            </Action>
-            <Parameters />
-        </AtomicTask>
-        <!-- Additional trees -->
-        <!-- Task 4 -->
-        <AtomicTask>
-            <TaskID>Tree4</TaskID>
-            <TaskDescription>Visit Tree 4 to capture thermal images</TaskDescription>
-            <Action>
-                <ActionType>moveToLocation</ActionType>
-                <moveToLocation>
-                    <Latitude>37.26644392937983</Latitude>
-                    <Longitude>-120.4201826654081</Longitude>
-                </moveToLocation>
-            </Action>
-            <Parameters />
-        </AtomicTask>
-        <AtomicTask>
-            <TaskID>Tree4Action</TaskID>
-            <TaskDescription>Take thermal picture at Tree 4</TaskDescription>
-            <Action>
-                <ActionType>takeThermalPicture</ActionType>
-                <takeThermalPicture>
-                    <numberOfPictures>1</numberOfPictures>
-                </takeThermalPicture>
-            </Action>
-            <Parameters />
-        </AtomicTask>
-        <!-- Repeat for the rest of the trees -->
     </AtomicTasks>
     <ActionSequence>
         <Sequence>
-            <TaskID>Tree1</TaskID>
-            <TaskID>Tree1Action</TaskID>
-            <TaskID>Tree2</TaskID>
-            <TaskID>Tree2Action</TaskID>
-            <TaskID>Tree3</TaskID>
-            <TaskID>Tree3Action</TaskID>
-            <TaskID>Tree4</TaskID>
-            <TaskID>Tree4Action</TaskID>
-            <!-- Include TaskIDs for all trees in sequence -->
+            <TaskID>Task_1</TaskID>
+            <TaskID>Task_2</TaskID>
+            <TaskID>Task_3</TaskID>
         </Sequence>
     </ActionSequence>
     <Outcome>
-        <State>atEndPoint</State>
+        <State>atStartingPoint</State>
     </Outcome>
     <Exits>
         <Exit>
             <Type>nominal</Type>
-        </Exit>
-        <Exit>
-            <Type>faulted</Type>
+            <!-- Additional information about the exit case can be added here if required -->
         </Exit>
     </Exits>
 </TaskTemplate>

@@ -3,17 +3,18 @@ logging: DEBUG
 # OpenAI API token
 token: "~/.gpt/token.env"
 # max number of retries to get a valid mission plan from ChatGPT
-max_retries: 3
+max_retries: 5
 max_tokens: 4096
 # DEPRECATED
 temperature: 0.2
-log_directory: "./app/gpt_outputs/ifac_experiments"
+log_directory: "./app/gpt_outputs/ifac_experiments/4o"
 # schema per 1872.1-2024 + farm layout
 schema:
   - "./app/resources/context/manipulator/kinova_schema.xsd"
   - "./app/resources/context/wheeled_bots/schema.xsd"
 context_files:
-  - "./app/resources/context/wheeled_bots/reza_small.geojson"
+  - "./app/resources/context/wheeled_bots/reza_medium.geojson"
+  # - "./app/resources/context/wheeled_bots/ucm_graph20_noreward.geojson"
 # who to send this too?
 host: 127.0.0.1
-port: 12345
+port: 12346

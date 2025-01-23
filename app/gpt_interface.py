@@ -38,7 +38,7 @@ class GPTInterface:
                             When asked to generate a mission, select the appropriate schema to generate an XML mission and \
                             use the context files to provide references in the mission plan for how the robot tasked with this mission should go about doing it. \
                             Within the context files you'll find information that should enable you to determine how the mission should operate. \
-                            If not, simply state that the mission is unachieveable and requires more information. \
+                            If not, simply state that the mission is unachieveable and do NOT provide a mission XML. \
                             Place the original question in the TaskDescription element of the CompositeTaskInformation element for logging.",
             },
             {
@@ -51,15 +51,17 @@ class GPTInterface:
                 "role": "user",
                 "content": "Here are the list of schemas that represent that available robots you have to accomplish your mission. \
                             You should remember you can only assign one robot to accomplish the task. \
-                            It is critical that the XML validates against the schema and that the schema location attribute is included. \
+                            It is critical that the XML validates against the schema and that the schema location attribute is included in the root tag. \
+                            Please include the XSI schema location every time you generate a mission. \
                             The mission must be syntactically correct and validate using an XML linter: "
                 + self.schemas,
             },
         ]
 
         # this could be empty
-        if len(context_files) > 0:
-            self.context += self._add_additional_context_files(context_files)
+        if context_files is not None:
+            if len(context_files) > 0:
+                self.context += self._add_additional_context_files(context_files)
 
         self.initial_context_length = len(self.context)
 
@@ -80,11 +82,12 @@ class GPTInterface:
         message.append({"role": "user", "content": prompt})
 
         completion: ChatCompletion = self.client.chat.completions.create(
-            model="o1-mini",
+            model="gpt-4o",
+            # model="o1-mini",
             messages=message,
             max_completion_tokens=self.max_tokens,
             # NOTE: this has been deprecated in o1-mini
-            # temperature=self.temperature,
+            temperature=self.temperature,
         )
 
         response: str | None = completion.choices[0].message.content

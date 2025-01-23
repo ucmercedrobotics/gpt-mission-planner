@@ -2,6 +2,7 @@
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="https://robotics.ucmerced.edu/task"
            xmlns="https://robotics.ucmerced.edu/task"
+           xmlns:xsi="https://robotics.ucmerced.edu/task"
            elementFormDefault="qualified">
 
     <!-- Schema defining a ClearPath Husky 4 wheeled robot -->
@@ -14,11 +15,11 @@
                 <!-- I don't think these are needed in the global task definition -->
                 <!-- <xs:element name="StateVariables" type="StateVariablesType"/>
                 <xs:element name="Parameters" type="ParametersType"/> -->
-                <xs:element name="Preconditions" type="PreconditionsType"/>
+                <xs:element name="Preconditions" type="PreconditionsType" minOccurs="0"/>
                 <xs:element name="AtomicTasks" type="AtomicTasksType"/>
                 <xs:element name="ActionSequence" type="ActionSequenceType"/>
-                <xs:element name="Outcome" type="OutcomeType"/>
-                <xs:element name="Exits" type="ExitsType"/>
+                <xs:element name="Outcome" type="OutcomeType" minOccurs="0"/>
+                <xs:element name="Exits" type="ExitsType" minOccurs="0"/>
             </xs:sequence>
         </xs:complexType>
     </xs:element>
@@ -157,7 +158,6 @@
                         <xs:element name="TaskDescription" type="xs:string"/>
                         <xs:element name="StateVariables" type="StateVariablesType" minOccurs="0"/>
                         <xs:element name="Action" type="robotActions" minOccurs="0" maxOccurs="1"/>
-                        <xs:element name="Parameters" type="ParametersType"/>
                         <xs:element name="Preconditions" type="PreconditionsType" minOccurs="0"/>
                     </xs:sequence>
                 </xs:complexType>
@@ -172,8 +172,6 @@
             <xs:element name="Comparator" type="comparisonType" minOccurs="1" maxOccurs="1"/>
             <xs:choice minOccurs="1" maxOccurs="1">
                 <xs:element name="HardValue" type="xs:double"/>
-                <!-- TODO: implement this in ROS -->
-                <xs:element name="AbstractValue" type="xs:string"/>
             </xs:choice>
         </xs:sequence>
     </xs:complexType>

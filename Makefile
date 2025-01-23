@@ -22,4 +22,4 @@ run:
 	python3 ./app/mission_planner.py --config ${CONFIG}
 
 server:
-	nc -l 0.0.0.0 12345
+	nc -l 0.0.0.0 12346

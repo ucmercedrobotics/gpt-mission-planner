@@ -12,4 +12,4 @@ schema:
   - "./app/resources/context/manipulator/kinova_schema.xsd"
 # who to send this too?
 host: 127.0.0.1
-port: 12345
+port: 12346

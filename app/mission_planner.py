@@ -72,7 +72,9 @@ class MissionPlanner:
                         f"Retrying after failed to validate GPT mission plan: {e}"
                     )
                     # ask mission with relevant context
-                    mp_out = self.gpt.ask_gpt(e, True)
+                    mp_out = self.gpt.ask_gpt(
+                        e + "\n Please return to me the full XML mission plan.", True
+                    )
                     # XML should be formatted ```xml```
                     mp_out = parse_xml(mp_out)
                     # write to temp file

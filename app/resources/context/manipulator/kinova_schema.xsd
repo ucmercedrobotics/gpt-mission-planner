@@ -2,6 +2,7 @@
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="https://robotics.ucmerced.edu/task"
            xmlns="https://robotics.ucmerced.edu/task"
+           xmlns:xsi="https://robotics.ucmerced.edu/task"
            elementFormDefault="qualified">
 
     <!-- Schema defining a robot manipulator arm KINOVA KORTEX Gen3 -->
@@ -31,7 +32,7 @@
             <xs:enumeration value="identifyObject"/>
             <xs:enumeration value="nextBestView"/>
             <xs:enumeration value="goToPosition"/>
-            <!-- TODO: I think there needs to be something here a bit higher level to identify object? -->
+            <xs:enumeration value="rotate"/>
         </xs:restriction>
     </xs:simpleType>
 
@@ -60,11 +61,25 @@
         </xs:sequence>
     </xs:complexType>
 
+    <!-- Simple type for end effector movement types -->
+    <xs:simpleType name="movementType">
+        <xs:restriction base="xs:string">
+            <!-- relative movement defined by movement from end effector current position -->
+            <!-- NOTE: +X is left, -X is right, +Y is up, -Y is down, +Z is forward, -Z is backward -->
+            <xs:enumeration value="end_effector_link"/>
+            <!-- absolute movement defined by movement from origin point, not current position -->
+            <!-- NOTE: +X is right, -X is left, +Y is forward, -Y is backward, +Z is up, -Z is down -->
+            <xs:enumeration value="base_link"/>
+        </xs:restriction>
+    </xs:simpleType>
+
     <!-- Complex type for object segmentation -->
     <xs:complexType name="identifyObjectType">
         <xs:sequence>
             <!-- object characteristics -->
             <xs:element name="objectName" type="xs:string"/>
+            <!-- distance in meters, normal distance is set to be 0.75m. adjust according to requests -->
+            <xs:element name="objectDistance" type="xs:float"/>
             <xs:element name="objectColor" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
         </xs:sequence>
     </xs:complexType>
@@ -80,13 +95,18 @@
     <!-- Complex type for moving to a relative position -->
     <xs:complexType name="goToPositionType">
         <xs:sequence>
+            <xs:element name="movement" type="movementType"/>
             <!-- meters in all directions -->
-            <!-- X represents lateral movement -->
             <xs:element name="x" type="xs:decimal"/>
-            <!-- Y represents vertical movement -->
             <xs:element name="y" type="xs:decimal"/>
-            <!-- Z represents forward and backward movement -->
             <xs:element name="z" type="xs:decimal"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Complex type for moving to a relative position -->
+    <xs:complexType name="rotateType">
+        <xs:sequence>
+            <xs:element name="movement" type="movementType"/>
             <!-- the 3 below are in radians -->
             <xs:element name="roll" type="xs:decimal"/>
             <xs:element name="pitch" type="xs:decimal"/>
@@ -104,6 +124,7 @@
                 <xs:element name="identifyObject" type="identifyObjectType"/>
                 <xs:element name="nextBestView" type="nextBestViewType"/>
                 <xs:element name="goToPosition" type="goToPositionType"/>
+                <xs:element name="rotate" type="rotateType"/>
             </xs:choice>
         </xs:sequence>
     </xs:complexType>
@@ -175,7 +196,6 @@
                         <xs:element name="TaskDescription" type="xs:string"/>
                         <xs:element name="StateVariables" type="StateVariablesType" minOccurs="0"/>
                         <xs:element name="Action" type="manipulatorActions" minOccurs="0" maxOccurs="1"/>
-                        <xs:element name="Parameters" type="ParametersType" minOccurs="0"/>
                         <xs:element name="Preconditions" type="PreconditionsType" minOccurs="0"/>
                     </xs:sequence>
                 </xs:complexType>
@@ -190,11 +210,11 @@
                 <xs:sequence>
                     <xs:element name="Comparator" type="comparisonType" minOccurs="1" maxOccurs="1"/>
                     <xs:choice minOccurs="1" maxOccurs="1">
+                        <!-- use hard for number value comparisons combined with comparisonType -->
                         <xs:element name="HardValue" type="xs:double" minOccurs="1" maxOccurs="1"/>
-                        <!-- TODO: implement this in ROS -->
-                        <xs:element name="AbstractValue" type="xs:string" minOccurs="1" maxOccurs="1"/>
                     </xs:choice>
                 </xs:sequence>
+                <!-- strictly for true/false -->
                 <xs:element name="ReturnStatus" type="xs:boolean" minOccurs="1" maxOccurs="1"/>
             </xs:choice>
         </xs:sequence>

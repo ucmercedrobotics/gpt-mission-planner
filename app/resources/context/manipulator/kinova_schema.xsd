@@ -32,7 +32,6 @@
             <xs:enumeration value="identifyObject"/>
             <xs:enumeration value="nextBestView"/>
             <xs:enumeration value="goToPosition"/>
-            <xs:enumeration value="rotate"/>
         </xs:restriction>
     </xs:simpleType>
 
@@ -92,7 +91,7 @@
         </xs:sequence>
     </xs:complexType>
 
-    <!-- Complex type for moving to a relative position -->
+    <!-- Complex type for moving to a pose -->
     <xs:complexType name="goToPositionType">
         <xs:sequence>
             <xs:element name="movement" type="movementType"/>
@@ -100,13 +99,6 @@
             <xs:element name="x" type="xs:decimal"/>
             <xs:element name="y" type="xs:decimal"/>
             <xs:element name="z" type="xs:decimal"/>
-        </xs:sequence>
-    </xs:complexType>
-
-    <!-- Complex type for moving to a relative position -->
-    <xs:complexType name="rotateType">
-        <xs:sequence>
-            <xs:element name="movement" type="movementType"/>
             <!-- the 3 below are in radians -->
             <xs:element name="roll" type="xs:decimal"/>
             <xs:element name="pitch" type="xs:decimal"/>
@@ -124,7 +116,6 @@
                 <xs:element name="identifyObject" type="identifyObjectType"/>
                 <xs:element name="nextBestView" type="nextBestViewType"/>
                 <xs:element name="goToPosition" type="goToPositionType"/>
-                <xs:element name="rotate" type="rotateType"/>
             </xs:choice>
         </xs:sequence>
     </xs:complexType>

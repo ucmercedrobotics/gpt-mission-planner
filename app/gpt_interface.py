@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from openai.types.chat.chat_completion import ChatCompletion
 
-from context import ifac_2025_context, verification_agent_context
+from context import iros_2025_context, verification_agent_context
 
 
 class GPTInterface:
@@ -37,7 +37,7 @@ class GPTInterface:
             self._set_schema(s)
 
         # context can be updated from context.py
-        self.context = ifac_2025_context(self.schemas)
+        self.context = iros_2025_context(self.schemas)
 
         # this could be empty
         if context_files is not None:
@@ -60,7 +60,7 @@ class GPTInterface:
         self._set_promela_template(promela_template_path)
 
         # default context
-        self.context = verification_agent_context(self.schemas, self.promela_template)
+        self.context = verification_agent_context(self.schemas)
 
         # TODO: add in context files if needed for LTL generation
         # this could be empty
@@ -70,13 +70,15 @@ class GPTInterface:
 
         self.initial_context_length = len(self.context)
 
-    def add_context(self, user: str, assistant: str | None) -> None:
+    def add_context(self, user: str, assistant: str | None = None) -> None:
         # generate new GPT API dict string context
         new_user_context = {"role": "user", "content": user}
-        new_assistant_context = {"role": "assistant", "content": assistant}
         # append to pre-existing context
         self.context.append(new_user_context)
-        self.context.append(new_assistant_context)
+        # do the same if you want to capture response
+        if assistant is not None:
+            new_assistant_context = {"role": "assistant", "content": assistant}
+            self.context.append(new_assistant_context)
 
     def reset_context(self):
         self.context = self.context[0 : self.initial_context_length]

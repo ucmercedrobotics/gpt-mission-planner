@@ -2,6 +2,7 @@ import logging
 import tempfile
 import subprocess
 import os
+import stat
 
 import click
 import yaml
@@ -42,7 +43,7 @@ class MissionPlanner:
         self.context_files: list[str] = context_files
         # logging GPT output folder, make if not there
         self.log_directory: str = log_directory
-        os.makedirs(self.log_directory, exist_ok=True)
+        os.makedirs(self.log_directory, mode=777, exist_ok=True)
         # max number of times that GPT can try and fix the mission plan
         self.max_retries: int = max_retries
         # init gpt interface
@@ -144,9 +145,11 @@ class MissionPlanner:
         self.logger.info(
             "Generating LTL to verify mission against Promela generated system..."
         )
+        
+        self.pml_gpt.add_context("Use this Promela system along with the mission query to generate an LTL: " + promela_string)
 
         # use second GPT agent to generate LTL
-        ltl_out: str | None = self.pml_gpt.ask_gpt(mission_query, True)
+        ltl_out: str | None = self.pml_gpt.ask_gpt("Mission plan: " + mission_query, True)
         # parse out LTL statement
         ltl_out = parse_xml(ltl_out, "ltl")
         # append to promela file
@@ -156,11 +159,14 @@ class MissionPlanner:
         # execute spin verification
         try:
             self.logger.info(
-                subprocess.check_output([self.spin_path, "-search", self.promela_path])
+                subprocess.check_output([self.spin_path, "-search", "-a", self.promela_path])
             )
         except subprocess.CalledProcessError as err:
             self.logger.error(err)
         # TODO: figure out if validation was successful, retry if not
+        
+        # get rid of previous promela system
+        self.pml_gpt.reset_context()
 
     def get_promela_output_path(self) -> str:
         return self.promela_path
@@ -175,6 +181,8 @@ class MissionPlanner:
             temp_file.write(mp_out)
             # name of temp file output
             temp_file_name = temp_file.name
+
+        os.chmod(temp_file_name, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
 
         return temp_file_name
 

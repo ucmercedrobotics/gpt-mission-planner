@@ -1,8 +1,8 @@
-mtype = { takeThermalPicture, takeAmbientTemperature, takeCO2Reading, moveToLocation };
+mtype = { takeThermalPicture, takeAmbientTemperature, takeCO2Reading, moveToLocation }; // available action pool for robot
 
 typedef Action {
-    mtype actionType;
-    int parameter1;
+    mtype actionType; // type of action
+    int parameter1; // argument to give to action, e.g takeAmbientTemperature parameter1 will be number of samples
     int parameter2;
 };
 
@@ -10,4 +10,3 @@ typedef Task {
     int id;
     Action action;
 };
-

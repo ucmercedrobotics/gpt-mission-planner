@@ -49,7 +49,7 @@ class GPTInterface:
     def init_promela_context(
         self,
         schema_path: list[str],
-        promela_template_path: str,
+        promela_template: str,
         context_files: list[str],
     ):
         # TODO: I think we need a list of task names or a way to format the task naming based on some kind of standard
@@ -57,10 +57,8 @@ class GPTInterface:
             # all robots must come with a schema
             self._set_schema(s)
 
-        self._set_promela_template(promela_template_path)
-
         # default context
-        self.context = verification_agent_context(self.schemas)
+        self.context = verification_agent_context(promela_template)
 
         # TODO: add in context files if needed for LTL generation
         # this could be empty
@@ -129,10 +127,3 @@ class GPTInterface:
             )
 
         return context_list
-
-    def _set_promela_template(self, promela_template_path: str) -> None:
-        with open(promela_template_path, "r") as file:
-            self.promela_template = file.read()
-
-    def get_promela_template(self) -> str:
-        return self.promela_template

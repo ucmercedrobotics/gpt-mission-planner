@@ -58,11 +58,13 @@ class MissionPlanner:
             self.pml_gpt: GPTInterface = GPTInterface(
                 self.logger, token_path, max_tokens, temperature
             )
-            self.pml_gpt.init_promela_context(
-                self.schema_paths, promela_template_path, self.context_files
-            )
             self.promela: PromelaCompiler = PromelaCompiler(
-                self.pml_gpt.get_promela_template(), self.logger
+                promela_template_path, self.logger
+            )
+            self.pml_gpt.init_promela_context(
+                self.schema_paths,
+                self.promela.get_promela_template(),
+                self.context_files,
             )
             # this string gets generated at a later time when promela is written out
             self.promela_path: str = ""
@@ -140,16 +142,23 @@ class MissionPlanner:
         self.promela.init_xml_tree(xml_mp_path)
         # generate promela string that defines mission/system
         promela_string: str = self.promela.parse_xml()
+        task_names: str = self.promela.get_task_names()
 
         # this begins the second phase of the formal verification
         self.logger.info(
             "Generating LTL to verify mission against Promela generated system..."
         )
-        
-        self.pml_gpt.add_context("Use this Promela system along with the mission query to generate an LTL: " + promela_string)
+
+        self.pml_gpt.add_context(
+            "Use these Promela object names when generating the LTL so the syntax matche the system file: "
+            + task_names
+        )
+        # TODO: think about adding global variables for more asserts
 
         # use second GPT agent to generate LTL
-        ltl_out: str | None = self.pml_gpt.ask_gpt("Mission plan: " + mission_query, True)
+        ltl_out: str | None = self.pml_gpt.ask_gpt(
+            "Mission plan: " + mission_query, True
+        )
         # parse out LTL statement
         ltl_out = parse_xml(ltl_out, "ltl")
         # append to promela file
@@ -159,12 +168,14 @@ class MissionPlanner:
         # execute spin verification
         try:
             self.logger.info(
-                subprocess.check_output([self.spin_path, "-search", "-a", self.promela_path])
+                subprocess.check_output(
+                    [self.spin_path, "-search", "-a", self.promela_path]
+                )
             )
         except subprocess.CalledProcessError as err:
             self.logger.error(err)
         # TODO: figure out if validation was successful, retry if not
-        
+
         # get rid of previous promela system
         self.pml_gpt.reset_context()
 

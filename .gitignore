@@ -1,3 +1,5 @@
+# vscode artifacts
+.vscode/
 # ROS2 artifacts
 build/
 install/

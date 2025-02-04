@@ -10,6 +10,11 @@ RUN apt-get -y update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y software-properties-common build-essential wget netcat-traditional \
     byacc flex graphviz
 
+RUN wget -q -O - https://www.lrde.epita.fr/repo/debian.gpg | apt-key add - && \
+    echo 'deb http://www.lrde.epita.fr/repo/debian/ stable/' >> /etc/apt/sources.list && \
+    apt-get -y update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y spot libspot-dev spot-doc python3-spot
+
 # install spin -> prebuilt image
 RUN wget https://github.com/nimble-code/Spin/archive/refs/tags/version-6.5.2.tar.gz && \
     gunzip *.tar.gz && \

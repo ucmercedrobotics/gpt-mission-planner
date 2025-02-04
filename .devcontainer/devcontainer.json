@@ -24,7 +24,8 @@
     },
     "runArgs": [
         "--net=host",
-        "--env-file=${localEnv:HOME}/.gpt/token.env"
+        "--env-file=${localEnv:HOME}/.gpt/token.env",
+        "-v=${localEnv:HOME}/.ssh:/root/.ssh"
     ],
     "mounts": [
     ]

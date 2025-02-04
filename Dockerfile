@@ -16,13 +16,13 @@ RUN wget -q -O - https://www.lrde.epita.fr/repo/debian.gpg | apt-key add - && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y spot libspot-dev spot-doc python3-spot
 
 # install spin -> prebuilt image
-RUN wget https://github.com/nimble-code/Spin/archive/refs/tags/version-6.5.2.tar.gz && \
-    gunzip *.tar.gz && \
-    tar -xf *.tar && \
-    cd Spin-version-6.5.2/Bin && \
-    gunzip spin651_linux64.gz && \
-    ./spin651_linux64 -V && \
-    mv ./spin651_linux64 /usr/local/bin/spin
+# RUN wget https://github.com/nimble-code/Spin/archive/refs/tags/version-6.5.2.tar.gz && \
+#     gunzip *.tar.gz && \
+#     tar -xf *.tar && \
+#     cd Spin-version-6.5.2/Bin && \
+#     gunzip spin651_linux64.gz && \
+#     ./spin651_linux64 -V && \
+#     mv ./spin651_linux64 /usr/local/bin/spin
 
 # For more information, please refer to https://aka.ms/vscode-docker-python
 # This is particularly for debugging using VSCode

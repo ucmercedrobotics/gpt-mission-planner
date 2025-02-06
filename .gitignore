@@ -7,6 +7,7 @@ log/
 # MAC Cache
 **.DS_Store**
 # Python Cache
+.mypy_cache/
 **__pycache__**
 # output file from sandbox runs of GPT
 output.txt

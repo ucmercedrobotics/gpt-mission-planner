@@ -9,25 +9,6 @@ NS: dict = {
     "task": "https://robotics.ucmerced.edu/task",
 }
 
-PROCTYPE: str = """
-proctype execute_task(Task t) {
-    if
-    :: t.action.actionType == moveToLocation ->
-        // Perform the moveToLocation action
-        printf("Moving to location: Latitude=%d, Longitude=%d\\n", t.action.parameter1, t.action.parameter2);
-    :: t.action.actionType == takeThermalPicture ->
-        // Perform the takeThermalPicture action
-        printf("Taking thermal picture: count=%d\\n", t.action.parameter1);
-    :: t.action.actionType == takeAmbientTemperature ->
-        // Perform the takeAmbientTemperature action
-        printf("Taking ambient temperature: samples=%d\\n", t.action.parameter1);
-    :: t.action.actionType == takeCO2Reading ->
-        // Perform the takeCO2Reading action
-        printf("Taking CO2 reading: samples=%d\\n", t.action.parameter1);
-    fi;
-}
-"""
-
 SENSOR_FN: str = """
 proctype select_{}() {{
     int i;
@@ -121,20 +102,12 @@ class PromelaCompiler:
             if action_type == "moveToLocation":
                 execution_calls.append(
                     f"""
-    {task_name}.id = {id};
-    {task_name}.action.actionType = {action_type};
-    {task_name}.action.parameter1 = {round(float(param1) * 1e5)};
-    {task_name}.action.parameter2 = {round(float(param2) * 1e5)};
-    run execute_task({task_name});\n"""
+    {task_name}.action.actionType = {action_type};\n"""
                 )
             else:
                 execution_calls.append(
                     f"""
-    {task_name}.id = {id};
-    {task_name}.action.actionType = {action_type};
-    {task_name}.action.parameter1 = {round(float(param1))};
-    {task_name}.action.parameter2 = {round(float(param2))};
-    run execute_task({task_name});\n"""
+    {task_name}.action.actionType = {action_type};\n"""
                 )
             id += 1
             action_type_sequence.append(action_type)
@@ -143,6 +116,7 @@ class PromelaCompiler:
         self._handle_conditional(execution_calls, action_type_sequence)
 
         # Concatenate task definitions and execution calls
+        promela_code += "\n"
         promela_code += self.task_names
         promela_code += "\n"
         promela_code += "".join(self.globals_used)
@@ -150,8 +124,6 @@ class PromelaCompiler:
         promela_code += "\ninit {\n"
         promela_code += "".join(execution_calls)
         promela_code += "\n}\n"
-
-        promela_code += PROCTYPE
 
         return promela_code
 

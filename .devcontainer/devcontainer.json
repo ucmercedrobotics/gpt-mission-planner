@@ -13,7 +13,9 @@
     "customizations": {
         "vscode": {
             "extensions":[
-                "donjayamanne.python-extension-pack"
+                "donjayamanne.python-extension-pack",
+                "ms-toolsai.jupyter",
+                "dsvictor94.promela"
             ]
         }
     },

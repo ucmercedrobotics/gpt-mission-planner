@@ -86,38 +86,26 @@ def verification_agent_context(promela_template: str) -> list:
     context: list = [
         {
             "role": "user",
-            "content": "You are a linear temporal logic generator that generates Spin compatible LTL missions based on mission input. \
-                            You should generate a single LTL that has the following 3 properties: \
-                            A safety property (something bad never happens) \
-                            A liveness property (something good eventually happens) \
-                            A fairness condition. \
-                            Please ensure that this LTL conforms to Spin syntax and can be compiled. \
-                            Also, please format your answer with markdown for LTL as such: ```ltl answer here ```",
+            "content": "You are a linear temporal logic generator that generates Spin compatible LTL missions based on mission input for a robot in a field. \
+                        You should generate a single LTL that has the following 2 properties: \
+                        All states MUST be initially false. \
+                        All atomic propositions MUST be changed sequentially since you can only accomplish tasks one at a time \
+                        i.e. you can only visit one tree at a time and take one picture at a time. \
+                        Please ensure that this LTL conforms to Spin syntax and can be compiled. \
+                        Also, please format your answer with markdown for LTL as such: ```ltl answer here ``` \
+                        Generate a simple LTL that explains the mission compliant with SPIN LTL. \
+                        Here is an example for a given mission, visit a tree and take a temperature sample. if the sample is over 30C, visit another tree. finally, go to end tree. : \
+                        ltl mission { \
+                        <>(MoveToTree1.action.actionType == moveToLocation &&  \
+                        <>(TakeTemperatureSample1.action.actionType == takeAmbientTemperature &&  \
+                            (temp > 30 -> <>(MoveToTree2.action.actionType == moveToLocation)) && \
+                            <>(MoveToEndTree.action.actionType == moveToLocation))) \
+                        }",
         },
         {
             "role": "user",
-            "content": "Here are the Promela datatypes used in the system file: "
+            "content": "Here are the Promela datatypes used in the system file. You should use these types to construct your LTL: "
             + promela_template,
-        },
-        {
-            "role": "user",
-            "content": "Here is an example of what the LTL should look like. \
-            Reminder, the LTL should be as verbose and capture as many of the states as it possibly can to ensure full validation. \
-            Note also that you should try your best to not join assertions together. Meaning, each of the 3 properties should have multiple assertions under and not one large one.: \
-            ```ltl \
-            ltl mission { \
-                /* Safety property */ \
-                []!(Task002.action.actionType == takeThermalPicture && Task001.action.actionType != moveToLocation) &&\
-                []!(Task004.action.actionType == takeThermalPicture && Task003.action.actionType != moveToLocation) &&\
-                /* Liveness property */\
-                <> (Task002.action.actionType == takeThermalPicture) &&\
-                <> (Task004.action.actionType == takeThermalPicture) &&\
-                /* Fairness property */\
-                [](Task001.action.actionType == moveToLocation -> <> (Task002.action.actionType == takeThermalPicture)) &&\
-                [](Task003.action.actionType == moveToLocation -> <> (Task004.action.actionType == takeThermalPicture)) &&\
-            }\
-            ``` \
-            Only use actionType when generating your LTL as was done above. Do NOT use parameter1 or parameter2 in your LTL generation. ",
         },
         # context
     ]

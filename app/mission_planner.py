@@ -142,6 +142,7 @@ class MissionPlanner:
         self.promela.init_xml_tree(xml_mp_path)
         # generate promela string that defines mission/system
         promela_string: str = self.promela.parse_xml()
+        # TODO: we need to understand if this is creating bias
         task_names: str = self.promela.get_task_names()
 
         # this begins the second phase of the formal verification
@@ -150,14 +151,17 @@ class MissionPlanner:
         )
 
         self.pml_gpt.add_context(
-            "Use these Promela object names when generating the LTL so the syntax matche the system file: "
+            "You MUST use these Promela object names when generating the LTL. Otherwise syntax will be incorrect and SPIN will fail: "
             + task_names
         )
-        # TODO: think about adding global variables for more asserts
+        # self.pml_gpt.add_context(
+        #     "This is the Promela model that you should generate your LTL based on: "
+        #     + promela_string
+        # )
 
         # use second GPT agent to generate LTL
         ltl_out: str | None = self.pml_gpt.ask_gpt(
-            "Mission plan: " + mission_query, True
+            "Generate SPIN LTL based on this mission plan: " + mission_query, True
         )
         # parse out LTL statement
         ltl_out = parse_xml(ltl_out, "ltl")

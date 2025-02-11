@@ -18,10 +18,10 @@ def parse_schema_location(xml_file: str) -> str:
     return location.split(root.nsmap[None] + " ")[SCHEMA_LOCATION_INDEX]
 
 
-def parse_xml(mp_out: str | None) -> str:
+def parse_xml(mp_out: str | None, code_type: str = "xml") -> str:
     assert isinstance(mp_out, str)
 
-    xml_response: str = mp_out.split("```xml\n")[1]
+    xml_response: str = mp_out.split("```" + code_type + "\n")[1]
     xml_response = xml_response.split("```")[0]
 
     return xml_response

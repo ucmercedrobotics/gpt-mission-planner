@@ -1,0 +1,9 @@
+mtype = { takeThermalPicture, takeAmbientTemperature, takeCO2Reading, moveToLocation }; // available action pool for robot
+
+typedef Action {
+    mtype actionType; // type of action
+};
+
+typedef Task {
+    Action action;
+};

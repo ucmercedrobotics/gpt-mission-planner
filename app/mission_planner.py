@@ -1,5 +1,8 @@
 import logging
 import tempfile
+import subprocess
+import os
+import stat
 
 import click
 import yaml
@@ -7,6 +10,12 @@ import yaml
 from gpt_interface import GPTInterface
 from network_interface import NetworkInterface
 from xml_helper import parse_schema_location, parse_xml, validate_output
+from promela_compiler import PromelaCompiler
+
+
+LTL_KEY: str = "ltl"
+PROMELA_TEMPLATE_KEY: str = "promela_template"
+SPIN_PATH_KEY: str = "spin_path"
 
 
 class MissionPlanner:
@@ -18,6 +27,9 @@ class MissionPlanner:
         max_retries: int,
         max_tokens: int,
         temperature: float,
+        ltl: bool,
+        promela_template_path: str,
+        spin_path: str,
         log_directory: str,
         logger: logging.Logger,
         debug: bool,
@@ -29,8 +41,9 @@ class MissionPlanner:
         # set schema and farm file paths
         self.schema_paths: list[str] = schema_paths
         self.context_files: list[str] = context_files
-        # logging GPT output folder
+        # logging GPT output folder, make if not there
         self.log_directory: str = log_directory
+        os.makedirs(self.log_directory, mode=777, exist_ok=True)
         # max number of times that GPT can try and fix the mission plan
         self.max_retries: int = max_retries
         # init gpt interface
@@ -38,6 +51,24 @@ class MissionPlanner:
             self.logger, token_path, max_tokens, temperature
         )
         self.gpt.init_context(self.schema_paths, self.context_files)
+        # init Promela compiler
+        self.ltl: bool = ltl
+        if self.ltl:
+            # init XML mission gpt interface
+            self.pml_gpt: GPTInterface = GPTInterface(
+                self.logger, token_path, max_tokens, temperature
+            )
+            self.promela: PromelaCompiler = PromelaCompiler(
+                promela_template_path, self.logger
+            )
+            self.pml_gpt.init_promela_context(
+                self.schema_paths,
+                self.promela.get_promela_template(),
+                self.context_files,
+            )
+            # this string gets generated at a later time when promela is written out
+            self.promela_path: str = ""
+            self.spin_path: str = spin_path
 
     def configure_network(self, host: str, port: int) -> None:
         # network interface
@@ -89,12 +120,71 @@ class MissionPlanner:
             if not ret:
                 self.logger.error("Unable to generate mission plan from your prompt...")
             else:
+                self.logger.debug("Successful mission plan generation...")
+
+            # if specified in the YAM config to formally verify
+            if self.ltl:
+                self._formal_verification(mp_input, output_path)
+
+            if not ret:
+                self.logger.error("Unable to formally verify from your prompt...")
+            else:
                 # TODO: send off mission plan to TCP client
                 self.nic.send_file(output_path)
                 self.logger.debug("Successful mission plan generation...")
 
         # TODO: decide how the reuse flow works
         self.nic.close_socket()
+
+    def _formal_verification(self, mission_query: str, xml_mp_path: str) -> None:
+        self.logger.info("Generating Promela from mission...")
+        # from the mission output, create an XML tree
+        self.promela.init_xml_tree(xml_mp_path)
+        # generate promela string that defines mission/system
+        promela_string: str = self.promela.parse_xml()
+        # TODO: we need to understand if this is creating bias
+        task_names: str = self.promela.get_task_names()
+
+        # this begins the second phase of the formal verification
+        self.logger.info(
+            "Generating LTL to verify mission against Promela generated system..."
+        )
+
+        self.pml_gpt.add_context(
+            "You MUST use these Promela object names when generating the LTL. Otherwise syntax will be incorrect and SPIN will fail: "
+            + task_names
+        )
+        # self.pml_gpt.add_context(
+        #     "This is the Promela model that you should generate your LTL based on: "
+        #     + promela_string
+        # )
+
+        # use second GPT agent to generate LTL
+        ltl_out: str | None = self.pml_gpt.ask_gpt(
+            "Generate SPIN LTL based on this mission plan: " + mission_query, True
+        )
+        # parse out LTL statement
+        ltl_out = parse_xml(ltl_out, "ltl")
+        # append to promela file
+        promela_string += "\n" + ltl_out
+        # write pml system and LTL to file
+        self.promela_path = self._write_out_file(promela_string)
+        # execute spin verification
+        try:
+            self.logger.info(
+                subprocess.check_output(
+                    [self.spin_path, "-search", "-a", self.promela_path]
+                )
+            )
+        except subprocess.CalledProcessError as err:
+            self.logger.error(err)
+        # TODO: figure out if validation was successful, retry if not
+
+        # get rid of previous promela system
+        self.pml_gpt.reset_context()
+
+    def get_promela_output_path(self) -> str:
+        return self.promela_path
 
     def _write_out_file(self, mp_out: str | None) -> str:
         assert isinstance(mp_out, str)
@@ -106,6 +196,8 @@ class MissionPlanner:
             temp_file.write(mp_out)
             # name of temp file output
             temp_file_name = temp_file.name
+
+        os.chmod(temp_file_name, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
 
         return temp_file_name
 
@@ -122,6 +214,11 @@ def main(config: str):
 
     context_files: list[str] = []
 
+    # don't generate/check LTL by default
+    ltl: bool = False
+    pml_template_path: str = ""
+    spin_path: str = ""
+
     try:
         # configure logger
         logging.basicConfig(level=logging._nameToLevel[config_yaml["logging"]])
@@ -132,6 +229,20 @@ def main(config: str):
         else:
             logger.info("No additional context files found. Proceeding...")
 
+        # if user specifies config key -> optional keys
+        if (
+            LTL_KEY in config_yaml
+            and PROMELA_TEMPLATE_KEY in config_yaml
+            and SPIN_PATH_KEY in config_yaml
+        ):
+            ltl = config_yaml[LTL_KEY]
+            pml_template_path = config_yaml[PROMELA_TEMPLATE_KEY]
+            spin_path = config_yaml[SPIN_PATH_KEY]
+        else:
+            logger.warning(
+                "No spin configuration found. Proceeding without formal verification..."
+            )
+
         mp: MissionPlanner = MissionPlanner(
             config_yaml["token"],
             config_yaml["schema"],
@@ -139,6 +250,9 @@ def main(config: str):
             config_yaml["max_retries"],
             config_yaml["max_tokens"],
             config_yaml["temperature"],
+            ltl,
+            pml_template_path,
+            spin_path,
             config_yaml["log_directory"],
             logger,
             config_yaml["debug"],

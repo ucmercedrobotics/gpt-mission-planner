@@ -77,7 +77,7 @@
     <!-- Complex type for robotActions -->
     <xs:complexType name="robotActions">
         <xs:sequence>
-            <xs:element name="ActionType" type="robotActionTypes"/>
+            <xs:element name="ActionType" type="robotActionTypes" minOccurs="1"/>
             <xs:choice>
                 <xs:element name="takeThermalPicture" type="takeThermalPictureType"/>
                 <xs:element name="takeAmbientTemperature" type="takeAmbientTemperatureType"/>

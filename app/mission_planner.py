@@ -265,9 +265,9 @@ class MissionPlanner:
             # parse out LTL statement
             ltl_out = parse_xml(ltl_out, "ltl")
             # append to promela file
-            promela_string += "\n" + ltl_out
+            new_promela_string: str = promela_string + "\n" + ltl_out
             # write pml system and LTL to file
-            self.promela_path = self._write_out_file(promela_string)
+            self.promela_path = self._write_out_file(new_promela_string)
             # execute spin verification
             # TODO: this output isn't as useful as trail file, maybe can use later if needed.
             ret, err = self._execute_shell_cmd(

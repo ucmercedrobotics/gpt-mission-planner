@@ -1,17 +1,17 @@
 import logging
 
 from dotenv import load_dotenv
-from openai import OpenAI
-from openai.types.chat.chat_completion import ChatCompletion
+import aisuite as ai
 
 from context import iros_2025_context, verification_agent_context
 
 
-class GPTInterface:
+class LLMInterface:
     def __init__(
         self,
         logger: logging.Logger,
         token_path: str,
+        model: str = "openai:gpt-4o",
         max_tokens: int = 2000,
         temperature: float = 0.2,
     ):
@@ -22,8 +22,10 @@ class GPTInterface:
         self.temperature: float = temperature
         # loading in secret API token from your env file
         load_dotenv(token_path)
-        # binding GPT client
-        self.client: OpenAI = OpenAI()
+        # binding LLM client
+        self.client: ai.Client = ai.Client()
+        # which model to use?
+        self.model: str = model
         # schema text
         self.schemas: str = ""
         # context
@@ -86,13 +88,8 @@ class GPTInterface:
         message: list = self.context.copy()
         message.append({"role": "user", "content": prompt})
 
-        completion: ChatCompletion = self.client.chat.completions.create(
-            model="gpt-4o",
-            # model="o1-mini",
-            messages=message,
-            max_completion_tokens=self.max_tokens,
-            # NOTE: this has been deprecated in o1-mini
-            temperature=self.temperature,
+        completion = self.client.chat.completions.create(
+            model=self.model, messages=message, temperature=self.temperature
         )
 
         response: str | None = completion.choices[0].message.content

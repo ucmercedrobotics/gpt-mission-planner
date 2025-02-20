@@ -9,7 +9,7 @@ import click
 import yaml
 import spot
 
-from gpt_interface import GPTInterface
+from gpt_interface import LLMInterface
 from network_interface import NetworkInterface
 from xml_helper import parse_schema_location, parse_xml, validate_output
 from promela_compiler import PromelaCompiler
@@ -18,6 +18,8 @@ from promela_compiler import PromelaCompiler
 LTL_KEY: str = "ltl"
 PROMELA_TEMPLATE_KEY: str = "promela_template"
 SPIN_PATH_KEY: str = "spin_path"
+CHATGPT4O: str = "openai:gpt-4o"
+CLAUDE35: str = "anthropic:claude-3-5-sonnet-20241022"
 
 
 class MissionPlanner:
@@ -49,16 +51,16 @@ class MissionPlanner:
         # max number of times that GPT can try and fix the mission plan
         self.max_retries: int = max_retries
         # init gpt interface
-        self.gpt: GPTInterface = GPTInterface(
-            self.logger, token_path, max_tokens, temperature
+        self.gpt: LLMInterface = LLMInterface(
+            self.logger, token_path, CHATGPT4O, max_tokens, temperature
         )
         self.gpt.init_context(self.schema_paths, self.context_files)
         # init Promela compiler
         self.ltl: bool = ltl
         if self.ltl:
             # init XML mission gpt interface
-            self.pml_gpt: GPTInterface = GPTInterface(
-                self.logger, token_path, max_tokens, temperature
+            self.pml_gpt: LLMInterface = LLMInterface(
+                self.logger, token_path, CHATGPT4O, max_tokens, temperature
             )
             self.promela: PromelaCompiler = PromelaCompiler(
                 promela_template_path, self.logger
@@ -270,23 +272,24 @@ class MissionPlanner:
             self.promela_path = self._write_out_file(new_promela_string)
             # execute spin verification
             # TODO: this output isn't as useful as trail file, maybe can use later if needed.
-            ret, err = self._execute_shell_cmd(
+            cli_ret, err = self._execute_shell_cmd(
                 [self.spin_path, "-search", "-a", "-O2", self.promela_path]
             )
             # if you didn't get an error from validation step, no more retries
-            if ret != 0:
+            if cli_ret != 0:
                 self.logger.error(f"Failed to execute spin command with error: {err}")
                 break
             pml_file: str = self.promela_path.split("/")[-1]
             # trail file means you failed
             if os.path.isfile(pml_file + ".trail"):
+                ret = -1
                 # move trail file since the promela file gets sent to self.log_directory
                 os.replace(pml_file + ".trail", self.promela_path + ".trail")
                 # run trail
-                ret, trail_out = self._execute_shell_cmd(
+                cli_ret, trail_out = self._execute_shell_cmd(
                     [self.spin_path, "-t", self.promela_path]
                 )
-                if ret != 0:
+                if cli_ret != 0:
                     self.logger.error(
                         f"Failed to execute trail file... Unable to get trace: {trail_out}"
                     )

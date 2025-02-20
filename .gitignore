@@ -4,6 +4,10 @@
 build/
 install/
 log/
+# SPIN
+pan
+# SPOT
+spot.aut
 # MAC Cache
 **.DS_Store**
 # Python Cache

@@ -83,13 +83,14 @@ class PromelaCompiler:
         self._define_tree(task_sequence, task_defs, execution_calls)
 
         self.task_names = "".join(task_defs)
+        global_list: list[str] = [f"int {x};" for x in self.globals_used]
 
         # Concatenate task definitions and execution calls
         promela_code += "\n"
         promela_code += self.task_names
         promela_code += "\n"
-        promela_code += "".join(self.globals_used)
-        promela_code += "\ninit {\n    atomic {\n\n"
+        promela_code += "".join(global_list)
+        promela_code += "\n\ninit {\n    atomic {\n\n"
         promela_code += "".join(execution_calls)
         promela_code += "\n    }\n}\n"
 
@@ -129,6 +130,7 @@ class PromelaCompiler:
         end_if: str = ":: else -> skip\n    fi\n\n"
         first_if: bool = True
         action_type: str = ""
+        running_conditional: bool = False
 
         for t in sequence:
             if t.tag == "{" + NS["task"] + "}" + "TaskID":
@@ -139,9 +141,13 @@ class PromelaCompiler:
                 execution_calls.append(
                     t.text + ".action.actionType = " + action_type + ";\n"
                 )
+                running_conditional = False
             elif t.tag == "{" + NS["task"] + "}" + "ConditionalActions":
                 cond: etree._Element = t.find("task:Conditional", NS)
-                g, c, v = self._parse_conditional_xml(cond, action_type)
+                g, c, v = self._parse_conditional_xml(
+                    cond, action_type, running_conditional
+                )
+                running_conditional = True
                 if first_if:
                     execution_calls.append(indent)
                     execution_calls.append(
@@ -175,7 +181,7 @@ class PromelaCompiler:
                 self.logger.error(f"Found unknown element tag: {t.tag}")
 
     def _parse_conditional_xml(
-        self, conditional: etree._Element, action_type: str
+        self, conditional: etree._Element, action_type: str, running_conditional: bool
     ) -> Tuple[str, str, str]:
 
         rs: etree._Element = conditional.find("task:" + ElementTags.RETURNSTATUS, NS)
@@ -192,7 +198,11 @@ class PromelaCompiler:
             raise Exception
 
         # add a global variable in PML to keep track of sensor readings
-        g = self._add_global(action_type)
+        if not running_conditional:
+            g = self._add_global(action_type)
+        # if you're in a running conditional, take the last used global
+        else:
+            g = self.globals_used[-1]
 
         return g, c, v
 
@@ -229,7 +239,7 @@ class PromelaCompiler:
         sensor_var: str = self.actions_to_pml_global[action_type] + str(
             len(self.globals_used)
         )
-        self.globals_used.append("int " + sensor_var + ";\n")
+        self.globals_used.append(sensor_var)
         return sensor_var
 
     @staticmethod

@@ -1,3 +1,19 @@
+SPOT_CONTEXT: str = (
+    'Now please take that last LTL and convert it to SPOT for me. \
+            This means no comparators (<>==), only atomic prepositions. Also, make their names meaningful for the user to read. \
+            All chained conditional statements must either be one or the other i.e. temp > 30 or temp <= 30. \
+            Name these conditional atomic preps the same but negate for opposite case when possible, instead of a new name. \
+            Account for this in your new LTL. \
+            Just return the formula for SPOT, no "ltl { <ltl here> }". Example: \
+            ```ltl \
+            <>(MoveToNorthMostTree &&\
+            X(TakeTemperatureReading &&\
+            X(((lowTemp && X(TakeCO2Reading && X(MoveToEnd))) ||\
+           (!lowTemp && X(TakeThermalPicture && X(MoveToEnd)))))))\
+            ```'
+)
+
+
 def ifac_2025_context(schemas: str) -> list:
     context: list = [
         {
@@ -86,7 +102,7 @@ def verification_agent_context(promela_template: str) -> list:
     context: list = [
         {
             "role": "user",
-            "content": "You are a linear temporal logic generator that generates Spin compatible LTL missions based on mission input for a robot in a field. \
+            "content": 'You are a linear temporal logic generator that generates Spin compatible LTL missions based on mission input for a robot in a field. \
                         You should generate a single LTL that has the following 3 properties: \
                         All states MUST be initially false. \
                         All atomic propositions MUST be changed sequentially (X not <>) since you can only accomplish tasks one at a time \
@@ -94,15 +110,15 @@ def verification_agent_context(promela_template: str) -> list:
                         Please ensure that this LTL conforms to Spin syntax and can be compiled. \
                         Also, please format your answer with markdown for LTL as such: ```ltl answer here ``` \
                         Generate a simple LTL that explains the mission compliant with SPIN LTL. \
-                        Here is an example for a given mission, visit a tree and take a temperature sample. if the sample is over 30C, visit another tree. finally, go to end tree. : \
-                        ltl mission { \
-                        (MoveToTree1.action.actionType == 0 && \
-                        X(MoveToTree1.action.actionType == moveToLocation &&  \
-                        X(TakeTemperatureSample1.action.actionType == takeAmbientTemperature &&  \
-                            X((temp > 30 -> X(MoveToTree2.action.actionType == moveToLocation)) && \
-                            X(MoveToEndTree.action.actionType == moveToLocation))))) \
+                        Here is an example for a given mission, "move to the north most tree and take a temperature reading. if lower than 30C, take a co2 reading. if not, take thermal picture. after, go to end" : \
+                        ltl mission {\
+                            (MoveToNorthMostTree.action.actionType == 0 &&\
+                            X(MoveToNorthMostTree.action.actionType == moveToLocation &&\
+                            X(TakeTemperatureReading.action.actionType == takeAmbientTemperature &&\
+                            X(((temp < 30 -> X(TakeCO2Reading.action.actionType == takeCO2Reading && X(MoveToEnd.action.actionType == moveToLocation))) ||\
+                            (temp >= 30 -> X(TakeThermalPicture.action.actionType == takeThermalPicture && X(MoveToEnd.action.actionType == moveToLocation))))))))\
                         } \
-                        Note, the first action MUST always start the LTL as being equal to 0 because of the nature of the state machine initializing all values to 0.",
+                        Note, the first action MUST always start the LTL as being equal to 0 because of the nature of the state machine initializing all values to 0.',
         },
         {
             "role": "user",

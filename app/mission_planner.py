@@ -1,8 +1,5 @@
 import logging
-import tempfile
-import subprocess
 import os
-import stat
 from typing import Tuple
 
 import click
@@ -11,8 +8,16 @@ import spot
 
 from gpt_interface import LLMInterface
 from network_interface import NetworkInterface
-from xml_helper import parse_schema_location, parse_xml, validate_output
+from utils.os_utils import (
+    parse_schema_location,
+    parse_code,
+    validate_output,
+    execute_shell_cmd,
+    write_out_file,
+)
 from promela_compiler import PromelaCompiler
+from context import SPOT_CONTEXT
+from utils.spot_utils import generate_accepting_run_string
 
 
 LTL_KEY: str = "ltl"
@@ -20,6 +25,8 @@ PROMELA_TEMPLATE_KEY: str = "promela_template"
 SPIN_PATH_KEY: str = "spin_path"
 CHATGPT4O: str = "openai:gpt-4o"
 CLAUDE35: str = "anthropic:claude-3-5-sonnet-20241022"
+# TODO: remove this
+HUMAN_REVIEW: bool = True
 
 
 class MissionPlanner:
@@ -58,13 +65,21 @@ class MissionPlanner:
         # init Promela compiler
         self.ltl: bool = ltl
         if self.ltl:
+            self.human_review: bool = HUMAN_REVIEW
             # init XML mission gpt interface
             self.pml_gpt: LLMInterface = LLMInterface(
                 self.logger, token_path, CHATGPT4O, max_tokens, temperature
             )
+            # Claude human verification substitute
+            self.verification_checker: LLMInterface = LLMInterface(
+                self.logger, token_path, CLAUDE35, max_tokens, temperature
+            )
+            # object for compiling Promela from XML
             self.promela: PromelaCompiler = PromelaCompiler(
                 promela_template_path, self.logger
             )
+            # setup context to give to formal verification agent.
+            # NOTE: only schemas and template used for now
             self.pml_gpt.init_promela_context(
                 self.schema_paths,
                 self.promela.get_promela_template(),
@@ -72,6 +87,7 @@ class MissionPlanner:
             )
             # this string gets generated at a later time when promela is written out
             self.promela_path: str = ""
+            # spin binary location
             self.spin_path: str = spin_path
             # configure spot
             spot.setup()
@@ -82,147 +98,41 @@ class MissionPlanner:
         # start connection to ROS agent
         self.nic.init_socket()
 
+    def get_promela_output_path(self) -> str:
+        return self.promela_path
+
     def run(self) -> None:
         while True:
             # ask user for their mission plan
             mp_input: str = input("Enter the specifications for your mission plan: ")
-
+            # loop for asking LLM for XML mission plan based on input -> handles failure retries
             ret, e, mp_out = self._xml_generation(mp_input)
-
             # TODO: should we do this after every mission plan or leave them in context?
             self.gpt.reset_context()
-
+            # check if we have a valid XML
             if ret:
                 self.logger.info("Successful mission plan generation...")
-                file_mp_out = self._write_out_file(mp_out)
+                file_mp_out = write_out_file(self.log_directory, mp_out)
             else:
                 self.logger.error(
                     f"Unable to generate mission plan from your prompt... error: {e}"
                 )
                 return
-
-            # if specified in the YAM config to formally verify
+            # if specified in the YAML config to formally verify
             if self.ltl:
                 ret = self._formal_verification(mp_input, mp_out)
-
+            # failure of this will only occur if formal verification was enabled.
+            # otherwise it sends out XML mission via TCP
             if ret:
                 # TODO: send off mission plan to TCP client
                 self.nic.send_file(file_mp_out)
-                self.logger.debug("Successful mission plan generation...")
+                self.logger.debug("Sending mission XML out to robot over TCP...")
             else:
                 self.logger.error("Unable to formally verify from your prompt...")
                 # TODO: do we break here?
 
         # TODO: decide how the reuse flow works
         self.nic.close_socket()
-
-    def get_promela_output_path(self) -> str:
-        return self.promela_path
-
-    def _formal_verification(self, mission_query: str, xml_mp: str) -> bool:
-        ret: bool = False
-
-        self.logger.debug("Generating Promela from mission...")
-        # from the mission output, create an XML tree
-        self.promela.init_xml_tree(xml_mp)
-        # generate promela string that defines mission/system
-        promela_string: str = self.promela.parse_xml()
-        # TODO: we need to understand if this is creating bias
-        task_names: str = self.promela.get_task_names()
-        globals: str = self.promela.get_globals()
-
-        # this begins the second phase of the formal verification
-        self.logger.debug(
-            "Generating LTL to verify mission against Promela generated system..."
-        )
-
-        # TODO: does this introduce bias?
-        self.pml_gpt.add_context(
-            "You MUST use these Promela object names when generating the LTL. Otherwise syntax will be incorrect and SPIN will fail: "
-            + task_names
-            + "\n"
-            + globals
-        )
-        # self.pml_gpt.add_context(
-        #     "This is the Promela model that you should generate your LTL based on: "
-        #     + promela_string
-        # )
-
-        if self._ltl_generation(mission_query, promela_string) == 0:
-            self.logger.info("Please confirm validity of mission decomposition...")
-        else:
-            self.logger.error(
-                "Failed to validate mission... Please see Promela model and trail."
-            )
-            return ret
-
-        spot_out: str | None = self.pml_gpt.ask_gpt(
-            'Now please take that last LTL and convert it to SPOT for me. \
-            This means no comparators (<>==), only atomic prepositions. Also, make their names meaningful for the user to read. \
-            All chained conditional statements must either be one or the other i.e. temp > 30 or temp <= 30. \
-            Name these conditional atomic preps the same but negate for opposite case when possible, instead of a new name. \
-            Account for this in your new LTL. \
-            Just return the formula for SPOT, no "ltl { <ltl here> }". Example: \
-            ```ltl \
-            <>(MoveToTree1 &&  \
-            X(TakeTemperatureSample1 &&  \
-            X((highTemp -> X(MoveToTree2)) && \
-            X(MoveToEndTree)))) \
-            ```',
-            True,
-        )
-
-        spot_out = parse_xml(spot_out, "ltl")
-
-        aut = spot.translate(spot_out)
-
-        aut.save("spot.aut", append=False)
-
-        ac = aut.accepting_run()
-
-        self.logger.debug(ac)
-
-        explanation: str | None = self.pml_gpt.ask_gpt(
-            " \
-            Explain the accepting run states simply for anyone to understand it based on the mission I originally asked, ignoring the cycle. \
-            Do NOT say anything other than the explanation of tasks. \
-            Speak in future tense. For example: \
-            The robot is set to perform the following tasks: \
-                \
-            1. First, the robot will move to the first tree. \
-            2. Then, it will take a temperature sample at the first tree. \
-            3. If the temperature at the first tree is high (over 30°C), the robot will move to the second tree. \
-            4. If the tempature is low, the robot will go straight to the end tree.\
-                \
-            Does this explanation accurately reflect the mission you intended? \
-            \n"
-            + str(ac)
-        )
-        assert isinstance(explanation, str)
-
-        resp: str = ""
-        while resp != ("y" or "n"):
-            resp = input(
-                explanation
-                + "\nNote, this is just one of several possibilities. \n\nType y/n."
-            )
-
-            if resp == "y":
-                self.logger.info("Mission proceeding...")
-                ret = True
-                break
-            elif resp == "n":
-                self.logger.info(
-                    "Conflict between mission and validator... Let's try again."
-                )
-                break
-            else:
-                continue
-
-        # get rid of previous promela system
-        self.pml_gpt.reset_context()
-
-        return ret
 
     def _xml_generation(self, mp_input: str) -> Tuple[bool, str, str]:
         retry: int = -1
@@ -234,10 +144,10 @@ class MissionPlanner:
             mp_out: str | None = self.gpt.ask_gpt(prompt, True)
             # if you're in debug mode, write the whole answer, not just xml
             if self.debug:
-                self._write_out_file(mp_out)
+                write_out_file(self.log_directory, mp_out)
                 self.logger.debug(mp_out)
             # XML should be formatted ```xml```
-            mp_out = parse_xml(mp_out)
+            mp_out = parse_code(mp_out)
             # path to selected schema based on xsi:schemaLocation
             selected_schema: str = parse_schema_location(mp_out)
             self.logger.debug(f"Schema selected by GPT: {selected_schema}")
@@ -256,6 +166,84 @@ class MissionPlanner:
         assert isinstance(mp_out, str)
         return ret, e, mp_out
 
+    def _formal_verification(self, mission_query: str, xml_mp: str) -> bool:
+        ret: bool = False
+
+        self.logger.debug("Generating Promela from mission...")
+        # from the mission output, create an XML tree
+        self.promela.init_xml_tree(xml_mp)
+        # generate promela string that defines mission/system
+        promela_string: str = self.promela.parse_code()
+        # TODO: we need to understand if this is creating bias
+        task_names: str = self.promela.get_task_names()
+        globals: str = self.promela.get_globals()
+        # this begins the second phase of the formal verification
+        self.logger.debug(
+            "Generating LTL to verify mission against Promela generated system..."
+        )
+        # TODO: does this introduce bias?
+        self.pml_gpt.add_context(
+            "You MUST use these Promela object names when generating the LTL. Otherwise syntax will be incorrect and SPIN will fail: "
+            + task_names
+            + "\n"
+            + globals
+        )
+        # self.pml_gpt.add_context(
+        #     "This is the Promela model that you should generate your LTL based on: "
+        #     + promela_string
+        # )
+        # generates the LTL and verifies it with SPIN; retry enabled
+        if self._ltl_generation(mission_query, promela_string) == 0:
+            self.logger.info("Please confirm validity of mission decomposition...")
+        else:
+            self.logger.error(
+                "Failed to validate mission... Please see Promela model and trail."
+            )
+            return ret
+        # ask LLM for a SPOT compliant LTL to visualize it
+        # TODO: is this step necessary?
+        spot_out: str | None = self.pml_gpt.ask_gpt(
+            SPOT_CONTEXT,
+            True,
+        )
+
+        spot_out = parse_code(spot_out, "ltl")
+
+        aut = spot.translate(spot_out)
+
+        aut.save("spot.aut", append=False)
+
+        runs = [generate_accepting_run_string(aut) for _ in range(3)]
+
+        if self.human_review:
+            resp: str = ""
+            while resp != ("y" or "n"):
+                resp = input(
+                    "Here are 3 example executions of your mission: "
+                    + "\n".join(runs)
+                    + "\nNote, these are just several possible runs. \n\nType y/n."
+                )
+
+                if resp == "y":
+                    self.logger.info("Mission proceeding...")
+                    ret = True
+                    break
+                elif resp == "n":
+                    self.logger.info(
+                        "Conflict between mission and validator... Let's try again."
+                    )
+                    break
+                else:
+                    continue
+        else:
+            # TODO: add in claude to verify for the user
+            pass
+
+        # get rid of previous promela system
+        self.pml_gpt.reset_context()
+
+        return ret
+
     def _ltl_generation(self, mission_query: str, promela_string: str) -> int:
         retry: int = -1
         ret: int = 0
@@ -265,14 +253,15 @@ class MissionPlanner:
             # use second GPT agent to generate LTL
             ltl_out: str | None = self.pml_gpt.ask_gpt(prompt, True)
             # parse out LTL statement
-            ltl_out = parse_xml(ltl_out, "ltl")
+            ltl_out = parse_code(ltl_out, "ltl")
+            assert isinstance(ltl_out, str)
             # append to promela file
             new_promela_string: str = promela_string + "\n" + ltl_out
             # write pml system and LTL to file
-            self.promela_path = self._write_out_file(new_promela_string)
+            self.promela_path = write_out_file(self.log_directory, new_promela_string)
             # execute spin verification
             # TODO: this output isn't as useful as trail file, maybe can use later if needed.
-            cli_ret, err = self._execute_shell_cmd(
+            cli_ret, err = execute_shell_cmd(
                 [self.spin_path, "-search", "-a", "-O2", self.promela_path]
             )
             # if you didn't get an error from validation step, no more retries
@@ -286,7 +275,7 @@ class MissionPlanner:
                 # move trail file since the promela file gets sent to self.log_directory
                 os.replace(pml_file + ".trail", self.promela_path + ".trail")
                 # run trail
-                cli_ret, trail_out = self._execute_shell_cmd(
+                cli_ret, trail_out = execute_shell_cmd(
                     [self.spin_path, "-t", self.promela_path]
                 )
                 if cli_ret != 0:
@@ -308,33 +297,6 @@ class MissionPlanner:
             retry += 1
 
         return ret
-
-    def _execute_shell_cmd(self, command: list) -> Tuple[int, str]:
-        ret: int = 0
-        out: str = ""
-
-        try:
-            out = str(subprocess.check_output(command))
-        except subprocess.CalledProcessError as err:
-            ret = err.returncode
-            out = str(err.output)
-
-        return ret, out
-
-    def _write_out_file(self, mp_out: str | None) -> str:
-        assert isinstance(mp_out, str)
-
-        # Create a temporary file in the specified directory
-        with tempfile.NamedTemporaryFile(
-            dir=self.log_directory, delete=False, mode="w"
-        ) as temp_file:
-            temp_file.write(mp_out)
-            # name of temp file output
-            temp_file_name = temp_file.name
-
-        os.chmod(temp_file_name, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
-
-        return temp_file_name
 
 
 @click.command()

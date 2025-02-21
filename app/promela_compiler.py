@@ -71,7 +71,7 @@ class PromelaCompiler:
     def init_xml_tree(self, xml_file: str) -> None:
         self.root: etree._Element = etree.fromstring(xml_file)
 
-    def parse_xml(self) -> str:
+    def parse_code(self) -> str:
         promela_code: str = self.promela_template
         task_defs: list[str] = []
         execution_calls: list[str] = []
@@ -277,7 +277,7 @@ def main():
         xml: str = fp.read()
 
     pc.init_xml_tree(xml)
-    logger.info(pc.parse_xml())
+    logger.info(pc.parse_code())
 
 
 if __name__ == "__main__":

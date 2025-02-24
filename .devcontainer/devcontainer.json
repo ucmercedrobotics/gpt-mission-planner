@@ -1,0 +1,34 @@
+{
+    "name": "GPT Development Container",
+    "privileged": true,
+    "remoteUser": "root",
+    "build": {
+        "dockerfile": "../Dockerfile",
+        "args": {
+            "USERNAME": "root"
+        }
+    },
+    "workspaceFolder": "/gpt-mission-planner",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/gpt-mission-planner,type=bind,consistency=cached",
+    "customizations": {
+        "vscode": {
+            "extensions":[
+                "donjayamanne.python-extension-pack",
+                "ms-toolsai.jupyter",
+                "dsvictor94.promela"
+            ]
+        }
+    },
+    "containerEnv": {
+        "ROS_AUTOMATIC_DISCOVERY_RANGE": "LOCALHOST",
+        "ROS_DOMAIN_ID": "42",
+        "SHELL": "/bin/bash"
+    },
+    "runArgs": [
+        "--net=host",
+        "--env-file=${localEnv:HOME}/.gpt/token.env",
+        "-v=${localEnv:HOME}/.ssh:/root/.ssh"
+    ],
+    "mounts": [
+    ]
+}

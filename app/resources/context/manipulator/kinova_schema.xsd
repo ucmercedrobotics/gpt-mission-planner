@@ -186,7 +186,7 @@
                         <xs:element name="TaskID" type="xs:string"/>
                         <xs:element name="TaskDescription" type="xs:string"/>
                         <xs:element name="StateVariables" type="StateVariablesType" minOccurs="0"/>
-                        <xs:element name="Action" type="manipulatorActions" minOccurs="0" maxOccurs="1"/>
+                        <xs:element name="Action" type="manipulatorActions" minOccurs="1" maxOccurs="1"/>
                         <xs:element name="Preconditions" type="PreconditionsType" minOccurs="0"/>
                     </xs:sequence>
                 </xs:complexType>

@@ -1,17 +1,17 @@
 import logging
 
 from dotenv import load_dotenv
-from openai import OpenAI
-from openai.types.chat.chat_completion import ChatCompletion
+import aisuite as ai
 
-from context import ifac_2025_context
+from context import iros_2025_context, verification_agent_context
 
 
-class GPTInterface:
+class LLMInterface:
     def __init__(
         self,
         logger: logging.Logger,
         token_path: str,
+        model: str = "openai:gpt-4o",
         max_tokens: int = 2000,
         temperature: float = 0.2,
     ):
@@ -22,10 +22,16 @@ class GPTInterface:
         self.temperature: float = temperature
         # loading in secret API token from your env file
         load_dotenv(token_path)
-        # binding GPT client
-        self.client: OpenAI = OpenAI()
+        # binding LLM client
+        self.client: ai.Client = ai.Client()
+        # which model to use?
+        self.model: str = model
         # schema text
         self.schemas: str = ""
+        # context
+        self.context: list = []
+        # input template file provided when wanting spin verification
+        self.promela_template: str = ""
 
     def init_context(self, schema_path: list[str], context_files: list[str]):
         for s in schema_path:
@@ -33,7 +39,7 @@ class GPTInterface:
             self._set_schema(s)
 
         # context can be updated from context.py
-        self.context: list = ifac_2025_context(self.schemas)
+        self.context = iros_2025_context(self.schemas)
 
         # this could be empty
         if context_files is not None:
@@ -42,13 +48,37 @@ class GPTInterface:
 
         self.initial_context_length = len(self.context)
 
-    def add_context(self, user: str, assistant: str | None) -> None:
+    def init_promela_context(
+        self,
+        schema_path: list[str],
+        promela_template: str,
+        context_files: list[str],
+    ):
+        # TODO: I think we need a list of task names or a way to format the task naming based on some kind of standard
+        for s in schema_path:
+            # all robots must come with a schema
+            self._set_schema(s)
+
+        # default context
+        self.context = verification_agent_context(promela_template)
+
+        # TODO: add in context files if needed for LTL generation
+        # this could be empty
+        # if context_files is not None:
+        #     if len(context_files) > 0:
+        #         self.context += self._add_additional_context_files(context_files)
+
+        self.initial_context_length = len(self.context)
+
+    def add_context(self, user: str, assistant: str | None = None) -> None:
         # generate new GPT API dict string context
         new_user_context = {"role": "user", "content": user}
-        new_assistant_context = {"role": "assistant", "content": assistant}
         # append to pre-existing context
         self.context.append(new_user_context)
-        self.context.append(new_assistant_context)
+        # do the same if you want to capture response
+        if assistant is not None:
+            new_assistant_context = {"role": "assistant", "content": assistant}
+            self.context.append(new_assistant_context)
 
     def reset_context(self):
         self.context = self.context[0 : self.initial_context_length]
@@ -58,13 +88,8 @@ class GPTInterface:
         message: list = self.context.copy()
         message.append({"role": "user", "content": prompt})
 
-        completion: ChatCompletion = self.client.chat.completions.create(
-            model="gpt-4o",
-            # model="o1-mini",
-            messages=message,
-            max_completion_tokens=self.max_tokens,
-            # NOTE: this has been deprecated in o1-mini
-            temperature=self.temperature,
+        completion = self.client.chat.completions.create(
+            model=self.model, messages=message, temperature=self.temperature
         )
 
         response: str | None = completion.choices[0].message.content

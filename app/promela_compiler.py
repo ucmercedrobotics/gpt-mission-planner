@@ -63,9 +63,9 @@ class PromelaCompiler:
             "neq": "!=",
         }
         self.actions_to_pml_global: dict = {
-            "takeThermalPicture": "thermal",
-            "takeAmbientTemperature": "temp",
-            "takeCO2Reading": "co2",
+            "takeThermalPicture": "thermalSample",
+            "takeAmbientTemperature": "temperatureSample",
+            "takeCO2Reading": "co2Sample",
         }
 
     def init_xml_tree(self, xml_file: str) -> None:
@@ -75,6 +75,7 @@ class PromelaCompiler:
         promela_code: str = self.promela_template
         task_defs: list[str] = []
         execution_calls: list[str] = []
+        self.reset()
 
         task_sequence: etree._Element = self.root.find(
             ".//task:ActionSequence", NS
@@ -83,14 +84,14 @@ class PromelaCompiler:
         self._define_tree(task_sequence, task_defs, execution_calls)
 
         self.task_names = "".join(task_defs)
-        global_list: list[str] = [f"int {x};" for x in self.globals_used]
+        global_list: list[str] = [f"int {x};\n" for x in self.globals_used]
 
         # Concatenate task definitions and execution calls
         promela_code += "\n"
         promela_code += self.task_names
         promela_code += "\n"
         promela_code += "".join(global_list)
-        promela_code += "\n\ninit {\n    atomic {\n\n"
+        promela_code += "\ninit {\n    atomic {\n\n"
         promela_code += "".join(execution_calls)
         promela_code += "\n    }\n}\n"
 
@@ -107,7 +108,13 @@ class PromelaCompiler:
         return self.task_names
 
     def get_globals(self) -> str:
-        return "".join(self.globals_used)
+        return "".join([f"int {g};\n" for g in self.globals_used])
+
+    def reset(self) -> None:
+        self.task_names = ""
+        # keeping track of specific sensors used from list
+        self.sensors_used = []
+        self.globals_used = []
 
     def _define_tree(
         self,

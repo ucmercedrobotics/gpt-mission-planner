@@ -26,7 +26,8 @@ SPIN_PATH_KEY: str = "spin_path"
 CHATGPT4O: str = "openai:gpt-4o"
 CLAUDE35: str = "anthropic:claude-3-5-sonnet-20241022"
 # TODO: remove this
-HUMAN_REVIEW: bool = True
+HUMAN_REVIEW: bool = False
+EXAMPLE_RUNS: int = 3
 
 
 class MissionPlanner:
@@ -126,7 +127,9 @@ class MissionPlanner:
             if ret:
                 # TODO: send off mission plan to TCP client
                 self.nic.send_file(file_mp_out)
-                self.logger.debug("Sending mission XML out to robot over TCP...")
+                self.logger.debug(
+                    f"Sending mission XML {file_mp_out} out to robot over TCP..."
+                )
             else:
                 self.logger.error("Unable to formally verify from your prompt...")
                 # TODO: do we break here?
@@ -178,16 +181,19 @@ class MissionPlanner:
         task_names: str = self.promela.get_task_names()
         globals: str = self.promela.get_globals()
         # this begins the second phase of the formal verification
-        self.logger.debug(
-            "Generating LTL to verify mission against Promela generated system..."
-        )
-        # TODO: does this introduce bias?
-        self.pml_gpt.add_context(
+        ask: str = (
             "You MUST use these Promela object names when generating the LTL. Otherwise syntax will be incorrect and SPIN will fail: "
+            + "Tasks: \n"
             + task_names
             + "\n"
+            + "Sample returns: \n"
             + globals
         )
+        self.logger.debug(
+            f"Generating LTL to verify mission against Promela generated system...\n Asking: {ask}"
+        )
+        # TODO: does this introduce bias?
+        self.pml_gpt.add_context(ask)
         # self.pml_gpt.add_context(
         #     "This is the Promela model that you should generate your LTL based on: "
         #     + promela_string
@@ -195,6 +201,7 @@ class MissionPlanner:
         # generates the LTL and verifies it with SPIN; retry enabled
         if self._ltl_generation(mission_query, promela_string) == 0:
             self.logger.info("Please confirm validity of mission decomposition...")
+            self.logger.debug(f"Promela description in file {self.promela_path}.")
         else:
             self.logger.error(
                 "Failed to validate mission... Please see Promela model and trail."
@@ -213,14 +220,17 @@ class MissionPlanner:
 
         aut.save("spot.aut", append=False)
 
-        runs = [generate_accepting_run_string(aut) for _ in range(3)]
+        runs: list[str] = [
+            generate_accepting_run_string(aut) for _ in range(EXAMPLE_RUNS)
+        ]
+        runs_str: str = "\n".join(runs)
 
         if self.human_review:
             resp: str = ""
             while resp != ("y" or "n"):
                 resp = input(
                     "Here are 3 example executions of your mission: "
-                    + "\n".join(runs)
+                    + runs_str
                     + "\nNote, these are just several possible runs. \n\nType y/n."
                 )
 
@@ -236,8 +246,25 @@ class MissionPlanner:
                 else:
                     continue
         else:
-            # TODO: add in claude to verify for the user
-            pass
+            ask = (
+                'Please answer this with one word: "Yes" or "No". \
+                Here is a mission plan request along with examples of how this mission would be carried out. \
+                In your opinion, would you say that ALL of these examples are faithful to requested mission?\nMission request: \n'
+                + mission_query
+                + "\nExample runs:\n"
+                + runs_str
+            )
+            self.logger.debug(f"Asking arbiter: {ask}")
+            acceptance = self.verification_checker.ask_gpt(ask)
+            assert isinstance(acceptance, str)
+
+            self.logger.debug(f"Claude says {acceptance}")
+
+            if "yes" in acceptance.lower():
+                self.logger.info("Claude approves. Mission proceeding...")
+                ret = True
+            else:
+                self.logger.warning(f"Claude disapproves. See example runs: {runs}")
 
         # get rid of previous promela system
         self.pml_gpt.reset_context()
@@ -246,7 +273,7 @@ class MissionPlanner:
 
     def _ltl_generation(self, mission_query: str, promela_string: str) -> int:
         retry: int = -1
-        ret: int = 0
+        ret: int = -1
         prompt: str = "Generate SPIN LTL based on this mission plan: " + mission_query
 
         while retry < self.max_retries:
@@ -267,11 +294,15 @@ class MissionPlanner:
             # if you didn't get an error from validation step, no more retries
             if cli_ret != 0:
                 self.logger.error(f"Failed to execute spin command with error: {err}")
-                break
+                prompt = (
+                    "Failure occured in SPIN validation output. Generate a new LTL: \n"
+                    + err
+                )
+                retry += 1
+                continue
             pml_file: str = self.promela_path.split("/")[-1]
             # trail file means you failed
             if os.path.isfile(pml_file + ".trail"):
-                ret = -1
                 # move trail file since the promela file gets sent to self.log_directory
                 os.replace(pml_file + ".trail", self.promela_path + ".trail")
                 # run trail
@@ -282,7 +313,6 @@ class MissionPlanner:
                     self.logger.error(
                         f"Failed to execute trail file... Unable to get trace: {trail_out}"
                     )
-                    break
                 prompt = (
                     "Failure occured in SPIN validation output. Generate a new LTL: \n"
                     + trail_out
@@ -292,6 +322,7 @@ class MissionPlanner:
                 )
             # no trail file, success
             else:
+                ret = 0
                 break
 
             retry += 1

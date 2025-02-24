@@ -3,7 +3,7 @@ logging: INFO
 # OpenAI API token
 token: "~/.gpt/token.env"
 # max number of retries to get a valid mission plan from ChatGPT
-max_retries: 3
+max_retries: 5
 # config for GPT
 max_tokens: 4096
 temperature: 0.2

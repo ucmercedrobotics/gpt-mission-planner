@@ -3,7 +3,7 @@ import random
 import spot
 
 
-def generate_accepting_run_string(aut):
+def generate_accepting_run_string(aut) -> str:
     curr = aut.get_init_state_number()
     path = []
     while not aut.state_is_accepting(curr):

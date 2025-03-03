@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Tuple
+from typing import Tuple, Any
 
 import click
 import yaml
@@ -9,15 +9,18 @@ import spot
 from gpt_interface import LLMInterface
 from network_interface import NetworkInterface
 from utils.os_utils import (
-    parse_schema_location,
-    parse_code,
-    validate_output,
     execute_shell_cmd,
     write_out_file,
 )
+from utils.xml_utils import (
+    parse_schema_location,
+    parse_code,
+    validate_output,
+    count_xml_tasks,
+)
 from promela_compiler import PromelaCompiler
 from context import SPOT_CONTEXT
-from utils.spot_utils import generate_accepting_run_string
+from utils.spot_utils import generate_accepting_run_string, count_ltl_tasks
 
 
 LTL_KEY: str = "ltl"
@@ -27,7 +30,7 @@ CHATGPT4O: str = "openai:gpt-4o"
 CLAUDE35: str = "anthropic:claude-3-5-sonnet-20241022"
 # TODO: remove this
 HUMAN_REVIEW: bool = False
-EXAMPLE_RUNS: int = 3
+EXAMPLE_RUNS: int = 5
 
 
 class MissionPlanner:
@@ -44,20 +47,22 @@ class MissionPlanner:
         spin_path: str,
         log_directory: str,
         logger: logging.Logger,
-        debug: bool,
     ):
         # logger instance
         self.logger: logging.Logger = logger
-        # debug mode
-        self.debug: bool = debug
         # set schema and farm file paths
         self.schema_paths: list[str] = schema_paths
         self.context_files: list[str] = context_files
         # logging GPT output folder, make if not there
         self.log_directory: str = log_directory
         os.makedirs(self.log_directory, mode=777, exist_ok=True)
+        # keeping track of validation status
+        self.xml_valid: bool = False
+        self.ltl_valid: bool = False
         # max number of times that GPT can try and fix the mission plan
         self.max_retries: int = max_retries
+        # retry count, managed globally to track all failures
+        self.retry: int = -1
         # init gpt interface
         self.gpt: LLMInterface = LLMInterface(
             self.logger, token_path, CHATGPT4O, max_tokens, temperature
@@ -66,6 +71,7 @@ class MissionPlanner:
         # init Promela compiler
         self.ltl: bool = ltl
         if self.ltl:
+            self.aut: Any = None
             self.human_review: bool = HUMAN_REVIEW
             # init XML mission gpt interface
             self.pml_gpt: LLMInterface = LLMInterface(
@@ -104,72 +110,143 @@ class MissionPlanner:
 
     def run(self) -> None:
         while True:
+            ret: bool = False
             # ask user for their mission plan
             mp_input: str = input("Enter the specifications for your mission plan: ")
-            # loop for asking LLM for XML mission plan based on input -> handles failure retries
-            ret, e, mp_out = self._xml_generation(mp_input)
-            # TODO: should we do this after every mission plan or leave them in context?
+            xml_input: str = mp_input
+            ltl_input: str = mp_input
+            while not ret and self.retry < self.max_retries:
+                # first ask of XML and LTL
+                if not self.xml_valid:
+                    ret, xml_out, xml_task_count = self._generate_xml(xml_input, True)
+                    if not ret:
+                        xml_input = xml_out
+                        continue
+                    # store file for logs
+                    file_xml_out = write_out_file(self.log_directory, xml_out)
+                if not self.ltl_valid and self.ltl:
+                    ltl_out, ltl_task_count = self._generate_ltl(ltl_input, True)
+                # preliminary check, but can be improved to be more thorough
+                if ltl_task_count != xml_task_count:
+                    reconsider: str = (
+                        "You and another agent generated a different number of tasks for this mission. Reconsider and give me another XML mission."
+                    )
+                    xml_input = reconsider
+                    ltl_input = reconsider
+                    self.retry += 1
+                    self.logger.warning(
+                        f"Task count mismatch: {xml_task_count} != {ltl_task_count}"
+                    )
+                    continue
+                # if we pass the first step, we can add context
+                self.gpt.add_context(xml_input, xml_out)
+
+                self.xml_valid = True
+
+                # if we're formally verifying
+                if self.ltl:
+                    # checking syntax of LTL since promela is manually created
+                    ret, e = self._formal_verification(xml_out, ltl_out)
+                    if not ret:
+                        ltl_input = e
+                        self.retry += 1
+                        continue
+                    # does Claude or the human agree?
+                    ret, e = self._spot_verification(mp_input)
+                    if not ret:
+                        ltl_input = e
+                        self.retry += 1
+                        continue
+                    self.ltl_valid = True
+                    # did you generate a trail file?
+                    ret, e = self._evaluate_spin_trail()
+                    if not ret:
+                        xml_input = e
+                        self.retry += 1
+                        # we assume that if claude or human passed the ltl, it's the XML
+                        self.xml_valid = False
+                        continue
+
+                # failure of this will only occur if formal verification was enabled.
+                # otherwise it sends out XML mission via TCP
+                if ret:
+                    # send off mission plan to TCP client
+                    self.nic.send_file(file_xml_out)
+                    self.logger.debug(
+                        f"Sending mission XML {file_xml_out} out to robot over TCP..."
+                    )
+                else:
+                    self.logger.error("Unable to formally verify from your prompt...")
+                    # TODO: do we break here?
+
+            # clear before new query
             self.gpt.reset_context()
-            # check if we have a valid XML
-            if ret:
-                self.logger.info("Successful mission plan generation...")
-                file_mp_out = write_out_file(self.log_directory, mp_out)
-            else:
-                self.logger.error(
-                    f"Unable to generate mission plan from your prompt... error: {e}"
-                )
-                return
-            # if specified in the YAML config to formally verify
-            if self.ltl:
-                ret = self._formal_verification(mp_input, mp_out)
-            # failure of this will only occur if formal verification was enabled.
-            # otherwise it sends out XML mission via TCP
-            if ret:
-                # TODO: send off mission plan to TCP client
-                self.nic.send_file(file_mp_out)
-                self.logger.debug(
-                    f"Sending mission XML {file_mp_out} out to robot over TCP..."
-                )
-            else:
-                self.logger.error("Unable to formally verify from your prompt...")
-                # TODO: do we break here?
+            self.pml_gpt.reset_context()
 
         # TODO: decide how the reuse flow works
         self.nic.close_socket()
 
-    def _xml_generation(self, mp_input: str) -> Tuple[bool, str, str]:
-        retry: int = -1
-        ret: bool = False
-        prompt: str = mp_input
+    def _generate_xml(self, prompt: str, count: bool = False) -> Tuple[bool, str, int]:
+        task_count: int = 0
+        # generate XML mission
+        xml_out: str | None = self.gpt.ask_gpt(prompt, True)
+        xml: str = parse_code(xml_out)
+        # validate XML output
+        ret, e = self._lint_xml(xml)
+        # check if we have a valid XML
+        if not ret:
+            xml = e
+            self.logger.warning(f"Failure to lint XML: {e}")
+        else:
+            if count:
+                task_count = count_xml_tasks(xml)
 
-        while not ret and retry < self.max_retries:
-            # ask mission with relevant context
-            mp_out: str | None = self.gpt.ask_gpt(prompt, True)
-            # if you're in debug mode, write the whole answer, not just xml
-            if self.debug:
-                write_out_file(self.log_directory, mp_out)
-                self.logger.debug(mp_out)
-            # XML should be formatted ```xml```
-            mp_out = parse_code(mp_out)
-            # path to selected schema based on xsi:schemaLocation
-            selected_schema: str = parse_schema_location(mp_out)
-            self.logger.debug(f"Schema selected by GPT: {selected_schema}")
-            # validate mission based on XSD
-            ret, e = validate_output(selected_schema, mp_out)
-            retry += 1
-            if not ret:
-                prompt = (
-                    "I got this error on validation. Please fix and return to me the full XML mission plan: \n"
-                    + e
-                )
-                self.logger.debug(
-                    f"Retrying after failed to validate GPT mission plan: {e}"
-                )
+        return ret, xml, task_count
 
-        assert isinstance(mp_out, str)
-        return ret, e, mp_out
+    def _generate_ltl(self, prompt: str, count: bool = False) -> Tuple[str, int]:
+        task_count: int = 0
+        # use second GPT agent to generate LTL
+        ltl_out: str | None = self.pml_gpt.ask_gpt(prompt, True)
+        # parse out LTL statement
+        ltl: str = parse_code(ltl_out, "ltl")
+        # ask SPOT/Claude
+        if count:
+            self.aut = self._ask_spot()
+            task_count = count_ltl_tasks(self.aut)
 
-    def _formal_verification(self, mission_query: str, xml_mp: str) -> bool:
+        return ltl, task_count
+
+    def _ask_spot(self):
+        spot_out: str | None = self.pml_gpt.ask_gpt(
+            SPOT_CONTEXT,
+            False,
+        )
+
+        spot_out = parse_code(spot_out, "ltl")
+
+        aut = spot.translate(spot_out)
+
+        return aut
+
+    def _lint_xml(self, xml_out: str) -> Tuple[bool, str]:
+        # path to selected schema based on xsi:schemaLocation
+        selected_schema: str = parse_schema_location(xml_out)
+        self.logger.debug(f"Schema selected by GPT: {selected_schema}")
+        # validate mission based on XSD
+        ret, e = validate_output(selected_schema, xml_out)
+
+        # check if we have a valid XML
+        if ret:
+            self.logger.info("Successful XML mission plan generation...")
+        else:
+            self.logger.error(
+                f"Unable to generate mission plan from your prompt... error: {e}"
+            )
+            e = "Error received while validating against schema: " + e
+
+        return ret, e
+
+    def _formal_verification(self, xml_mp: str, ltl_out: str) -> Tuple[bool, str]:
         ret: bool = False
 
         self.logger.debug("Generating Promela from mission...")
@@ -177,11 +254,24 @@ class MissionPlanner:
         self.promela.init_xml_tree(xml_mp)
         # generate promela string that defines mission/system
         promela_string: str = self.promela.parse_code()
-        # TODO: we need to understand if this is creating bias
+
+        # generates the LTL and verifies it with SPIN; retry enabled
+        ret, e = self._ltl_validation(promela_string, ltl_out)
+        if ret:
+            self.logger.debug(f"Promela description in file {self.promela_path}.")
+        else:
+            self.logger.error(
+                "Failed to validate mission... Please see Promela error above."
+            )
+
+        return ret, e
+
+    def _ltl_validation(self, promela_string: str, ltl_out: str) -> Tuple[bool, str]:
+        ret: bool = False
         task_names: str = self.promela.get_task_names()
         globals: str = self.promela.get_globals()
         # this begins the second phase of the formal verification
-        ask: str = (
+        prompt: str = (
             "You MUST use these Promela object names when generating the LTL. Otherwise syntax will be incorrect and SPIN will fail: "
             + "Tasks: \n"
             + task_names
@@ -189,39 +279,33 @@ class MissionPlanner:
             + "Sample returns: \n"
             + globals
         )
-        self.logger.debug(
-            f"Generating LTL to verify mission against Promela generated system...\n Asking: {ask}"
+
+        ltl_out, _ = self._generate_ltl(prompt)
+        # append to promela file
+        new_promela_string: str = promela_string + "\n" + ltl_out
+        # write pml system and LTL to file
+        self.promela_path = write_out_file(self.log_directory, new_promela_string)
+        # execute spin verification
+        # TODO: this output isn't as useful as trail file, maybe can use later if needed.
+        cli_ret, e = execute_shell_cmd(
+            [self.spin_path, "-search", "-a", "-O2", self.promela_path]
         )
-        # TODO: does this introduce bias?
-        self.pml_gpt.add_context(ask)
-        # self.pml_gpt.add_context(
-        #     "This is the Promela model that you should generate your LTL based on: "
-        #     + promela_string
-        # )
-        # generates the LTL and verifies it with SPIN; retry enabled
-        if self._ltl_generation(mission_query, promela_string) == 0:
-            self.logger.info("Please confirm validity of mission decomposition...")
-            self.logger.debug(f"Promela description in file {self.promela_path}.")
+        # if you didn't get an error from validation step, no more retries
+        if cli_ret != 0:
+            self.logger.error(f"Failed to execute spin command with error: {e}")
         else:
-            self.logger.error(
-                "Failed to validate mission... Please see Promela model and trail."
-            )
-            return ret
-        # ask LLM for a SPOT compliant LTL to visualize it
-        # TODO: is this step necessary?
-        spot_out: str | None = self.pml_gpt.ask_gpt(
-            SPOT_CONTEXT,
-            True,
-        )
+            ret = True
 
-        spot_out = parse_code(spot_out, "ltl")
+        return ret, e
 
-        aut = spot.translate(spot_out)
+    def _spot_verification(self, mission_query: str) -> Tuple[bool, str]:
+        ret: bool = False
+        e: str | None = ""
 
-        aut.save("spot.aut", append=False)
+        # self.aut.save("spot.aut", append=False)
 
         runs: list[str] = [
-            generate_accepting_run_string(aut) for _ in range(EXAMPLE_RUNS)
+            generate_accepting_run_string(self.aut) for _ in range(EXAMPLE_RUNS)
         ]
         runs_str: str = "\n".join(runs)
 
@@ -265,69 +349,40 @@ class MissionPlanner:
                 ret = True
             else:
                 self.logger.warning(f"Claude disapproves. See example runs: {runs}")
+                e = self.verification_checker.ask_gpt(
+                    "Can you explain why you disagree?"
+                )
+        assert isinstance(e, str)
 
-        # get rid of previous promela system
-        self.pml_gpt.reset_context()
+        return ret, e
 
-        return ret
-
-    def _ltl_generation(self, mission_query: str, promela_string: str) -> int:
-        retry: int = -1
-        ret: int = -1
-        prompt: str = "Generate SPIN LTL based on this mission plan: " + mission_query
-
-        while retry < self.max_retries:
-            # use second GPT agent to generate LTL
-            ltl_out: str | None = self.pml_gpt.ask_gpt(prompt, True)
-            # parse out LTL statement
-            ltl_out = parse_code(ltl_out, "ltl")
-            assert isinstance(ltl_out, str)
-            # append to promela file
-            new_promela_string: str = promela_string + "\n" + ltl_out
-            # write pml system and LTL to file
-            self.promela_path = write_out_file(self.log_directory, new_promela_string)
-            # execute spin verification
-            # TODO: this output isn't as useful as trail file, maybe can use later if needed.
-            cli_ret, err = execute_shell_cmd(
-                [self.spin_path, "-search", "-a", "-O2", self.promela_path]
+    def _evaluate_spin_trail(self) -> Tuple[bool, str]:
+        pml_file: str = self.promela_path.split("/")[-1]
+        e: str = ""
+        # trail file means you failed
+        if os.path.isfile(pml_file + ".trail"):
+            # move trail file since the promela file gets sent to self.log_directory
+            os.replace(pml_file + ".trail", self.promela_path + ".trail")
+            # run trail
+            cli_ret, trail_out = execute_shell_cmd(
+                [self.spin_path, "-t", self.promela_path]
             )
-            # if you didn't get an error from validation step, no more retries
             if cli_ret != 0:
-                self.logger.error(f"Failed to execute spin command with error: {err}")
-                prompt = (
-                    "Failure occured in SPIN validation output. Generate a new LTL: \n"
-                    + err
+                self.logger.error(
+                    f"Failed to execute trail file... Unable to get trace: {trail_out}"
                 )
-                retry += 1
-                continue
-            pml_file: str = self.promela_path.split("/")[-1]
-            # trail file means you failed
-            if os.path.isfile(pml_file + ".trail"):
-                # move trail file since the promela file gets sent to self.log_directory
-                os.replace(pml_file + ".trail", self.promela_path + ".trail")
-                # run trail
-                cli_ret, trail_out = execute_shell_cmd(
-                    [self.spin_path, "-t", self.promela_path]
-                )
-                if cli_ret != 0:
-                    self.logger.error(
-                        f"Failed to execute trail file... Unable to get trace: {trail_out}"
-                    )
-                prompt = (
-                    "Failure occured in SPIN validation output. Generate a new LTL: \n"
-                    + trail_out
-                )
-                self.logger.debug(
-                    "Retrying after failing to pass formal validation step..."
-                )
-            # no trail file, success
-            else:
-                ret = 0
-                break
+            e = (
+                "We converted this XML mission to Promela and ran it through SPIN. Failure occured in SPIN validation output. Generate a new XML mission: \n"
+                + trail_out
+            )
+            self.logger.debug(
+                "Retrying after failing to pass formal validation step..."
+            )
+        # no trail file, success
+        else:
+            ret = True
 
-            retry += 1
-
-        return ret
+        return ret, e
 
 
 @click.command()
@@ -352,6 +407,7 @@ def main(config: str):
         logging.basicConfig(level=logging._nameToLevel[config_yaml["logging"]])
         # OpenAI loggers turned off completely.
         logging.getLogger("openai").setLevel(logging.CRITICAL)
+        logging.getLogger("anthropic").setLevel(logging.CRITICAL)
         logging.getLogger("httpx").setLevel(logging.CRITICAL)
         logging.getLogger("httpcore").setLevel(logging.CRITICAL)
         logger: logging.Logger = logging.getLogger()
@@ -387,7 +443,6 @@ def main(config: str):
             spin_path,
             config_yaml["log_directory"],
             logger,
-            config_yaml["debug"],
         )
         mp.configure_network(config_yaml["host"], int(config_yaml["port"]))
     except yaml.YAMLError as exc:

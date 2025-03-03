@@ -20,3 +20,8 @@ def generate_accepting_run_string(aut) -> str:
         path.append(spot.bdd_format_formula(aut.get_dict(), sel_e.cond))
 
     return " ".join(path)
+
+
+def count_ltl_tasks(aut) -> int:
+    # count transitions without self-loops
+    return sum(1 for s in range(aut.num_states()) for t in aut.out(s) if t.dst != s)

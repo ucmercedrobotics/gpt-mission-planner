@@ -1,5 +1,4 @@
-debug: false
-logging: INFO
+logging: DEBUG
 # OpenAI API token
 token: "~/.gpt/token.env"
 # max number of retries to get a valid mission plan from ChatGPT

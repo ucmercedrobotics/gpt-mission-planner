@@ -1,4 +1,3 @@
-debug: true
 logging: DEBUG
 # OpenAI API token
 token: "~/.gpt/token.env"

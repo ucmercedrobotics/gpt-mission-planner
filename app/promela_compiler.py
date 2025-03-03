@@ -1,14 +1,12 @@
-from lxml import etree
 import logging
 import sys
 from enum import Enum
 from typing import Tuple
 
-# TODO: extract this from XSD.
-NS: dict = {
-    "xs": "http://www.w3.org/2001/XMLSchema",
-    "task": "https://robotics.ucmerced.edu/task",
-}
+from lxml import etree
+
+from utils.xml_utils import NS
+
 
 SENSOR_FN: str = """
 proctype select_{}() {{

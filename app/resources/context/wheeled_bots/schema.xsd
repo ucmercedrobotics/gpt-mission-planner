@@ -71,6 +71,7 @@
         <xs:sequence>
             <xs:element name="Latitude" type="xs:decimal"/>
             <xs:element name="Longitude" type="xs:decimal"/>
+            <xs:element name="Reward" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
         </xs:sequence>
     </xs:complexType>
 

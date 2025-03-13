@@ -1,9 +1,8 @@
 SPOT_CONTEXT: str = (
     'Now please take that last LTL and convert it to SPOT for me. \
-            This means no comparators (<>==), only atomic prepositions. Also, make their names meaningful for the user to read. \
-            All chained conditional statements must either be one or the other i.e. temp > 30 or temp <= 30. \
-            Name these conditional atomic preps the same but negate for opposite case when possible, instead of a new name. \
-            Account for this in your new LTL. \
+            You can remove the initial task == 0 because it is for SPIN compliance only. \
+            This means no comparators (<>==), only atomic prepositions. For if-else cases, you should make a single atomic preposition and negate it. \
+            Also, make their names meaningful for the user to read. \
             Just return the formula for SPOT, no "ltl { <ltl here> }". Example: \
             ```ltl \
             <>(MoveToNorthMostTree &&\
@@ -79,8 +78,10 @@ def iros_2025_context(schema: str) -> list:
                         When asked to generate a mission, create an XML file conformant to the known schema and \
                         use the GeoJSON file to provide references in the mission plan for things such as GPS location, tree type, etc. \
                         Tasks should almost always require driving to a tree and then doing an action unless doing multiple actions at the same tree. \
+                        Your first task should always go to start and last should be go to end. \
                         Place the original question in the TaskDescription element of the CompositeTaskInformation element for logging. \
-                        Please format your answers using XML markdown as such: ```xml answer ```. ",
+                        Please format your answers using XML markdown as such: ```xml answer ```. \
+                        !! Unicode strings with encoding declaration are not supported. Please use bytes input or XML fragments without declaration !!",
         },
         # context
         {
@@ -102,27 +103,35 @@ def verification_agent_context(promela_template: str) -> list:
     context: list = [
         {
             "role": "user",
-            "content": 'You are a linear temporal logic generator that generates Spin compatible LTL missions based on mission input for a robot in a field. \
-                        You should generate a single LTL that has the following 3 properties: \
-                        All states MUST be initially false. \
-                        All atomic propositions MUST be changed sequentially (X not <>) since you can only accomplish tasks one at a time \
+            "content": 'You are a linear temporal logic generator that generates Spin compatible LTL missions based on mission input for a mobile robot in a field. \
+                        Tasks should ALWAYS require driving to a tree and then doing an action unless doing multiple actions at the same tree. \
+                        Your first task should always go to start and last should be go to end. \
+                        You should generate a single LTL that has the following properties: \
+                        All atomic propositions MUST be sequential (X not <>) since you can only accomplish tasks one at a time \
                         i.e. you can only visit one tree at a time and take one picture at a time. \
-                        Please ensure that this LTL conforms to Spin syntax and can be compiled. \
-                        Also, please format your answer with markdown for LTL as such: ```ltl answer here ``` \
-                        Generate a simple LTL that explains the mission compliant with SPIN LTL. \
+                        Please ensure that this co-safe LTL conforms to Spin syntax and can be compiled. \
+                        Also, you MUST format your answer with markdown for LTL: ```ltl ltl mission \{\} ``` \
+                        Generate an LTL that explains the mission compliant with SPIN LTL. \
                         Here is an example for a given mission, "move to the north most tree and take a temperature reading. if lower than 30C, take a co2 reading. if not, take thermal picture. after, go to end" : \
+                        ```ltl \
                         ltl mission {\
                             (MoveToNorthMostTree.action.actionType == 0 &&\
                             X(MoveToNorthMostTree.action.actionType == moveToLocation &&\
                             X(TakeTemperatureReading.action.actionType == takeAmbientTemperature &&\
-                            X(((temp < 30 -> X(TakeCO2Reading.action.actionType == takeCO2Reading && X(MoveToEnd.action.actionType == moveToLocation))) ||\
-                            (temp >= 30 -> X(TakeThermalPicture.action.actionType == takeThermalPicture && X(MoveToEnd.action.actionType == moveToLocation))))))))\
+                            X((\
+                            (tempSample1 < 30 && X(TakeCO2Reading.action.actionType == takeCO2Reading && X(MoveToEnd.action.actionType == moveToLocation))) ||\
+                            (tempSample1 >= 30 && X(TakeThermalPicture.action.actionType == takeThermalPicture && X(MoveToEnd.action.actionType == moveToLocation)))\
+                            ))\
+                            )\
+                            )\
+                            )\
                         } \
+                        ``` \
                         Note, the first action MUST always start the LTL as being equal to 0 because of the nature of the state machine initializing all values to 0.',
         },
         {
             "role": "user",
-            "content": "Here are the Promela datatypes used in the system file. You should use these types to construct your LTL: "
+            "content": "Here are the Promela datatypes used in the system file. You should use these types to construct your LTL. MAKE SURE PARENTHESES ALIGN: "
             + promela_template,
         },
         # context

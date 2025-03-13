@@ -19,3 +19,5 @@ output.txt
 app/gpt_outputs/
 ## temp server files
 **.temp**
+# visualizing aut files
+out.html

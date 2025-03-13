@@ -62,11 +62,10 @@ class LLMInterface:
         # default context
         self.context = verification_agent_context(promela_template)
 
-        # TODO: add in context files if needed for LTL generation
         # this could be empty
-        # if context_files is not None:
-        #     if len(context_files) > 0:
-        #         self.context += self._add_additional_context_files(context_files)
+        if context_files is not None:
+            if len(context_files) > 0:
+                self.context += self._add_additional_context_files(context_files)
 
         self.initial_context_length = len(self.context)
 
@@ -80,8 +79,8 @@ class LLMInterface:
             new_assistant_context = {"role": "assistant", "content": assistant}
             self.context.append(new_assistant_context)
 
-    def reset_context(self):
-        self.context = self.context[0 : self.initial_context_length]
+    def reset_context(self, context_count: int):
+        self.context = self.context[0:context_count]
 
     # TODO: should we expose OpenAI object or string response?
     def ask_gpt(self, prompt: str, add_context: bool = False) -> str | None:

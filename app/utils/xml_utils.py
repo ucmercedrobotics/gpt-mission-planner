@@ -61,6 +61,39 @@ def count_xml_tasks(xml_mp: str):
         seq = action_sequence.find("task:Sequence", NS)
         if seq is not None:
             task_count = len(seq.xpath(".//task:TaskID", namespaces=NS))
-            task_count += len(seq.xpath(".//task:ConditionalActions", namespaces=NS))
+            conditional_counts = len(
+                seq.xpath(".//task:ConditionalActions", namespaces=NS)
+            )
+            # one for each conditional pair
+            consec_cond_tags = (
+                count_consecutive_tags(
+                    seq, "{" + NS["task"] + "}" + "ConditionalActions"
+                )
+                * 2
+            )
+            task_count += consec_cond_tags
+            # for those cases where these is no alternative defined, we have to add an edge and assume it terminates
+            # this is for counting against automata transition edges
+            task_count += (conditional_counts - consec_cond_tags) * 2
 
     return task_count
+
+
+def count_consecutive_tags(parent, tag_name):
+    count = 0
+    prev_was_target = False
+
+    for elem in parent:
+        if elem.tag == tag_name:
+            if prev_was_target:
+                count += 1  # Count only the first occurrence of a sequence
+                prev_was_target = False  # Reset so we count each cluster once
+            else:
+                prev_was_target = True
+        else:
+            prev_was_target = False  # Reset when a different tag is encountered
+
+        # Recursively check nested elements
+        count += count_consecutive_tags(elem, tag_name)
+
+    return count

@@ -2,7 +2,7 @@ logging: DEBUG
 # OpenAI API token
 token: "~/.gpt/token.env"
 # max number of retries to get a valid mission plan from ChatGPT
-max_retries: 5
+max_retries: 10
 # config for GPT
 max_tokens: 4096
 temperature: 0.2
@@ -12,7 +12,9 @@ log_directory: "./app/gpt_outputs/iros_experiments/4o"
 schema:
   - "./app/resources/context/wheeled_bots/schema.xsd"
 context_files:
-  - "./app/resources/context/wheeled_bots/reza_medium.geojson"
+  - "./app/resources/context/wheeled_bots/reza_small.geojson"
+  # - "./app/resources/context/wheeled_bots/reza_medium.geojson"
+  # - "app/resources/context/wheeled_bots/ucm_graph20.geojson"
 # who to send this to?
 host: 127.0.0.1
 port: 12346

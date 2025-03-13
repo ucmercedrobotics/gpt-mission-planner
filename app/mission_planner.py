@@ -5,6 +5,7 @@ from typing import Tuple, Any
 import click
 import yaml
 import spot
+import re
 
 from gpt_interface import LLMInterface
 from network_interface import NetworkInterface
@@ -27,7 +28,7 @@ LTL_KEY: str = "ltl"
 PROMELA_TEMPLATE_KEY: str = "promela_template"
 SPIN_PATH_KEY: str = "spin_path"
 CHATGPT4O: str = "openai:gpt-4o"
-CLAUDE35: str = "anthropic:claude-3-5-sonnet-20241022"
+CLAUDE37: str = "anthropic:claude-3-7-sonnet-20250219"
 # TODO: remove this
 HUMAN_REVIEW: bool = False
 EXAMPLE_RUNS: int = 5
@@ -65,7 +66,7 @@ class MissionPlanner:
         self.retry: int = -1
         # init gpt interface
         self.gpt: LLMInterface = LLMInterface(
-            self.logger, token_path, CHATGPT4O, max_tokens, temperature
+            self.logger, token_path, CLAUDE37, max_tokens, temperature
         )
         self.gpt.init_context(self.schema_paths, self.context_files)
         # init Promela compiler
@@ -75,11 +76,11 @@ class MissionPlanner:
             self.human_review: bool = HUMAN_REVIEW
             # init XML mission gpt interface
             self.pml_gpt: LLMInterface = LLMInterface(
-                self.logger, token_path, CHATGPT4O, max_tokens, temperature
+                self.logger, token_path, CLAUDE37, max_tokens, temperature
             )
             # Claude human verification substitute
             self.verification_checker: LLMInterface = LLMInterface(
-                self.logger, token_path, CLAUDE35, max_tokens, temperature
+                self.logger, token_path, CHATGPT4O, max_tokens, temperature
             )
             # object for compiling Promela from XML
             self.promela: PromelaCompiler = PromelaCompiler(
@@ -108,9 +109,15 @@ class MissionPlanner:
     def get_promela_output_path(self) -> str:
         return self.promela_path
 
+    def reset(self) -> None:
+        self.retry = 0
+        self.xml_valid = False
+        self.ltl_valid = False
+
     def run(self) -> None:
         while True:
             ret: bool = False
+            self.reset()
             # ask user for their mission plan
             mp_input: str = input("Enter the specifications for your mission plan: ")
             xml_input: str = mp_input
@@ -118,50 +125,71 @@ class MissionPlanner:
             while not ret and self.retry < self.max_retries:
                 # first ask of XML and LTL
                 if not self.xml_valid:
-                    ret, xml_out, xml_task_count = self._generate_xml(xml_input, True)
+                    try:
+                        ret, xml_out, xml_task_count = self._generate_xml(
+                            xml_input, True
+                        )
+                    except Exception as e:
+                        self.logger.debug(str(e))
+                        ret = False
+                        xml_input = str(e)
+                        self.retry += 1
+                        continue
                     if not ret:
                         xml_input = xml_out
                         continue
                     # store file for logs
                     file_xml_out = write_out_file(self.log_directory, xml_out)
+                    self.logger.debug(f"Wrote out temp XML file: {file_xml_out}")
+                    self.xml_valid = True
                 if not self.ltl_valid and self.ltl:
-                    ltl_out, ltl_task_count = self._generate_ltl(ltl_input, True)
+                    try:
+                        ltl_out, ltl_task_count = self._generate_ltl(ltl_input)
+                    except Exception as e:
+                        self.logger.debug(str(e))
+                        ret = False
+                        ltl_input = str(e)
+                        self.retry += 1
+                        continue
+                    self.ltl_valid = True
                 # preliminary check, but can be improved to be more thorough
                 if ltl_task_count != xml_task_count:
                     reconsider: str = (
-                        "You and another agent generated a different number of tasks for this mission. Reconsider and give me another XML mission."
+                        f"You and another agent generated a different number of tasks for this mission. Reconsider and give me another answer."
                     )
                     xml_input = reconsider
                     ltl_input = reconsider
+                    self.xml_valid = False
+                    self.ltl_valid = False
                     self.retry += 1
                     self.logger.warning(
                         f"Task count mismatch: {xml_task_count} != {ltl_task_count}"
                     )
+                    ret = False
                     continue
-                # if we pass the first step, we can add context
-                self.gpt.add_context(xml_input, xml_out)
-
-                self.xml_valid = True
 
                 # if we're formally verifying
                 if self.ltl:
                     # checking syntax of LTL since promela is manually created
-                    ret, e = self._formal_verification(xml_out, ltl_out)
+                    ret, err = self._formal_verification(xml_out, ltl_out)
                     if not ret:
-                        ltl_input = e
                         self.retry += 1
+                        self.pml_gpt.add_context(err)
                         continue
-                    # does Claude or the human agree?
-                    ret, e = self._spot_verification(mp_input)
+                    # does Arbiter LLM or the human agree?
+                    ret, err = self._spot_verification(mp_input)
                     if not ret:
-                        ltl_input = e
                         self.retry += 1
+                        self.pml_gpt.add_context(
+                            "A third party disagrees this is valid because: " + err
+                        )
+                        self.ltl_valid = False
                         continue
                     self.ltl_valid = True
                     # did you generate a trail file?
-                    ret, e = self._evaluate_spin_trail()
+                    ret, err = self._evaluate_spin_trail()
                     if not ret:
-                        xml_input = e
+                        xml_input = err
                         self.retry += 1
                         # we assume that if claude or human passed the ltl, it's the XML
                         self.xml_valid = False
@@ -180,8 +208,8 @@ class MissionPlanner:
                     # TODO: do we break here?
 
             # clear before new query
-            self.gpt.reset_context()
-            self.pml_gpt.reset_context()
+            self.gpt.reset_context(self.gpt.initial_context_length)
+            self.pml_gpt.reset_context(self.pml_gpt.initial_context_length)
 
         # TODO: decide how the reuse flow works
         self.nic.close_socket()
@@ -190,6 +218,7 @@ class MissionPlanner:
         task_count: int = 0
         # generate XML mission
         xml_out: str | None = self.gpt.ask_gpt(prompt, True)
+        self.logger.debug(xml_out)
         xml: str = parse_code(xml_out)
         # validate XML output
         ret, e = self._lint_xml(xml)
@@ -203,28 +232,64 @@ class MissionPlanner:
 
         return ret, xml, task_count
 
-    def _generate_ltl(self, prompt: str, count: bool = False) -> Tuple[str, int]:
+    def _generate_ltl(self, prompt: str) -> Tuple[str, int]:
         task_count: int = 0
         # use second GPT agent to generate LTL
         ltl_out: str | None = self.pml_gpt.ask_gpt(prompt, True)
+        self.logger.debug(ltl_out)
         # parse out LTL statement
         ltl: str = parse_code(ltl_out, "ltl")
-        # ask SPOT/Claude
-        if count:
-            self.aut = self._ask_spot()
-            task_count = count_ltl_tasks(self.aut)
+        _, e = execute_shell_cmd([self.spin_path, "-f", ltl])
+        if "parentheses" in str(e).lower():
+            self.logger.debug(str(e))
+            raise Exception("parentheses not balanced")
+        # ask SPOT/Claude to generate automata for arbiter
+        self.aut = self._ask_spot()
+        task_count = count_ltl_tasks(self.aut)
 
         return ltl, task_count
 
-    def _ask_spot(self):
-        spot_out: str | None = self.pml_gpt.ask_gpt(
-            SPOT_CONTEXT,
-            False,
-        )
+    def _ask_spot(self) -> Any:
+        """Custom Spot helper function for decoding LTL with error handling
 
-        spot_out = parse_code(spot_out, "ltl")
+        Returns:
+            _type_: _description_
+        """
+        spot_in: str = SPOT_CONTEXT
+        original_context: int = len(self.pml_gpt.context)
 
-        aut = spot.translate(spot_out)
+        while self.retry < self.max_retries:
+            spot_out: str | None = self.pml_gpt.ask_gpt(spot_in, True)
+            self.logger.debug(spot_out)
+            spot_out = parse_code(spot_out, "ltl")
+            assert isinstance(spot_out, str)
+
+            # FOR SOME REASON SPOT REQUIRES AN EVENTUALLY CLAUSE
+            if spot_out[0] != "<":
+                spot_out = "<>(" + spot_out + ")"
+
+            try:
+                aut = spot.translate(spot_out)
+                break
+            # this catch is for SPOT specific error messages.
+            except Exception as e:
+                self.logger.debug(f"Failed Spot translate: {str(e)}")
+                aut = None
+                pattern = r"(syntax error.*(?:\n[^\n]*)?)"
+                matches = re.findall(pattern, str(e))
+                if len(matches) == 0:
+                    pattern = r"((?:\n[^\n]*).*parenthesis.*(?:\n[^\n]*)?)"
+                matches = re.findall(pattern, str(e))
+                if len(matches) == 0:
+                    spot_in = str(e)
+                else:
+                    spot_in = matches[0]
+                self.retry += 1
+
+        if aut is None:
+            raise TimeoutError
+
+        self.pml_gpt.reset_context(original_context)
 
         return aut
 
@@ -292,7 +357,7 @@ class MissionPlanner:
         )
         # if you didn't get an error from validation step, no more retries
         if cli_ret != 0:
-            self.logger.error(f"Failed to execute spin command with error: {e}")
+            self.logger.error(f"Failed to execute spin command with syntax error: {e}")
         else:
             ret = True
 
@@ -301,8 +366,6 @@ class MissionPlanner:
     def _spot_verification(self, mission_query: str) -> Tuple[bool, str]:
         ret: bool = False
         e: str | None = ""
-
-        # self.aut.save("spot.aut", append=False)
 
         runs: list[str] = [
             generate_accepting_run_string(self.aut) for _ in range(EXAMPLE_RUNS)
@@ -338,20 +401,24 @@ class MissionPlanner:
                 + "\nExample runs:\n"
                 + runs_str
             )
-            self.logger.debug(f"Asking arbiter: {ask}")
-            acceptance = self.verification_checker.ask_gpt(ask)
+            self.logger.debug(f"Asking Arbiter: {ask}")
+            acceptance = self.verification_checker.ask_gpt(ask, True)
             assert isinstance(acceptance, str)
 
-            self.logger.debug(f"Claude says {acceptance}")
+            self.logger.debug(f"Arbiter says {acceptance}")
 
             if "yes" in acceptance.lower():
-                self.logger.info("Claude approves. Mission proceeding...")
+                self.logger.info("Arbiter approves. Mission proceeding...")
                 ret = True
             else:
-                self.logger.warning(f"Claude disapproves. See example runs: {runs}")
+                self.logger.warning(f"Arbiter disapproves. See example runs: {runs}")
                 e = self.verification_checker.ask_gpt(
-                    "Can you explain why you disagree?"
+                    "Can you explain why you disagree?", True
                 )
+                self.logger.debug(str(e))
+
+        self.aut.save("spot.aut", append=False)
+
         assert isinstance(e, str)
 
         return ret, e

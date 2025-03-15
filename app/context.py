@@ -3,12 +3,12 @@ SPOT_CONTEXT: str = (
             You can remove the initial task == 0 because it is for SPIN compliance only. \
             This means no comparators (<>==), only atomic prepositions. For if-else cases, you should make a single atomic preposition and negate it. \
             Also, make their names meaningful for the user to read. \
-            Just return the formula for SPOT, no "ltl { <ltl here> }". Example: \
+            Just return the formula for SPOT using all lowercase for the atomic preposition names, no "ltl { <ltl here> }". Example: \
             ```ltl \
-            <>(MoveToNorthMostTree &&\
-            X(TakeTemperatureReading &&\
-            X(((lowTemp && X(TakeCO2Reading && X(MoveToEnd))) ||\
-           (!lowTemp && X(TakeThermalPicture && X(MoveToEnd)))))))\
+            <>(movetonorthtree &&\
+            X(taketemperature &&\
+            X(((lowtemp && X(takeco2 && X(movetoend))) ||\
+           (!lowtemp && X(takethermal && X(movetoend)))))))\
             ```'
 )
 

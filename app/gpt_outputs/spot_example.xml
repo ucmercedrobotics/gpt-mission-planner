@@ -1,0 +1,76 @@
+<TaskTemplate xmlns="https://robotics.ucmerced.edu/task"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="https://robotics.ucmerced.edu/task schemas/schemas/bd_spot.xsd">
+    <CompositeTaskInformation>
+        <TaskID>TreeVisitMission</TaskID>
+        <TaskDescription>move spot to a tree and back</TaskDescription>
+    </CompositeTaskInformation>
+    <Preconditions>
+        <Precondition>
+            <Condition>atHomeBase</Condition>
+        </Precondition>
+    </Preconditions>
+    <AtomicTasks>
+        <AtomicTask>
+            <TaskID>GoToStart</TaskID>
+            <TaskDescription>Navigate to the starting position</TaskDescription>
+            <Action>
+                <ActionType>goToLocation</ActionType>
+                <goToLocation>
+                    <Latitude>37.26644394454138</Latitude>
+                    <Longitude>-120.4203310803755</Longitude>
+                </goToLocation>
+            </Action>
+        </AtomicTask>
+        <AtomicTask>
+            <TaskID>GoToPistachioTree</TaskID>
+            <TaskDescription>Navigate to the pistachio tree</TaskDescription>
+            <Action>
+                <ActionType>goToLocation</ActionType>
+                <goToLocation>
+                    <Latitude>37.26640669086454</Latitude>
+                    <Longitude>-120.4203290201385</Longitude>
+                </goToLocation>
+            </Action>
+        </AtomicTask>
+        <AtomicTask>
+            <TaskID>IdentifyPistachioTree</TaskID>
+            <TaskDescription>Identify the pistachio tree</TaskDescription>
+            <Action>
+                <ActionType>identifyObject</ActionType>
+                <identifyObject>
+                    <objectName>pistachio-tree</objectName>
+                    <objectColor>green</objectColor>
+                    <distanceToObject>0.75</distanceToObject>
+                </identifyObject>
+            </Action>
+        </AtomicTask>
+        <AtomicTask>
+            <TaskID>ReturnToEnd</TaskID>
+            <TaskDescription>Return to the end position</TaskDescription>
+            <Action>
+                <ActionType>goToLocation</ActionType>
+                <goToLocation>
+                    <Latitude>37.26644394454138</Latitude>
+                    <Longitude>-120.4203310803755</Longitude>
+                </goToLocation>
+            </Action>
+        </AtomicTask>
+    </AtomicTasks>
+    <ActionSequence>
+        <Sequence>
+            <TaskID>GoToStart</TaskID>
+            <TaskID>GoToPistachioTree</TaskID>
+            <TaskID>IdentifyPistachioTree</TaskID>
+            <TaskID>ReturnToEnd</TaskID>
+        </Sequence>
+    </ActionSequence>
+    <Outcome>
+        <State>atHomeBase</State>
+    </Outcome>
+    <Exits>
+        <Exit>
+            <Type>nominal</Type>
+        </Exit>
+    </Exits>
+</TaskTemplate>

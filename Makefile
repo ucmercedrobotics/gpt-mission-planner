@@ -17,7 +17,8 @@ endif
 
 repo-init:
 	python3 -m pip install pre-commit==3.4.0 && \
-	pre-commit install
+	pre-commit install && \
+	git submodule update --init --recursive
 
 build-image:
 	docker buildx build --load \

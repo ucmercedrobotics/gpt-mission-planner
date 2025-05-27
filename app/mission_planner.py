@@ -152,24 +152,25 @@ class MissionPlanner:
                         self.retry += 1
                         continue
                     self.ltl_valid = True
-                # preliminary check, but can be improved to be more thorough
-                if self.ltl and ltl_task_count != xml_task_count:
-                    reconsider: str = (
-                        f"You and another agent generated a different number of tasks for this mission. Reconsider and give me another answer."
-                    )
-                    xml_input = reconsider
-                    ltl_input = reconsider
-                    self.xml_valid = False
-                    self.ltl_valid = False
-                    self.retry += 1
-                    self.logger.warning(
-                        f"Task count mismatch: {xml_task_count} != {ltl_task_count}"
-                    )
-                    ret = False
-                    continue
 
                 # if we're formally verifying
                 if self.ltl:
+                    # preliminary check, but can be improved to be more thorough
+                    if ltl_task_count != xml_task_count:
+                        reconsider: str = (
+                            f"You and another agent generated a different number of tasks for this mission. Reconsider and give me another answer."
+                        )
+                        xml_input = reconsider
+                        ltl_input = reconsider
+                        self.xml_valid = False
+                        self.ltl_valid = False
+                        self.retry += 1
+                        self.logger.warning(
+                            f"Task count mismatch: {xml_task_count} != {ltl_task_count}"
+                        )
+                        ret = False
+                        continue
+
                     # checking syntax of LTL since promela is manually created
                     ret, err = self._formal_verification(xml_out, ltl_out)
                     if not ret:

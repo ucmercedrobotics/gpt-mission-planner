@@ -8,8 +8,8 @@ temperature: 0.2
 log_directory: "./app/gpt_outputs/ifac_experiments/4o"
 # schema per 1872.1-2024 + farm layout
 schema:
-  - "./app/resources/context/manipulator/kinova_schema.xsd"
-  - "./app/resources/context/wheeled_bots/schema.xsd"
+  - "schemas/schemas/kinova_gen3_6dof.xsd"
+  - "schemas/schemas/clearpath_husky.xsd"
 context_files:
   - "./app/resources/context/wheeled_bots/reza_medium.geojson"
   # - "./app/resources/context/wheeled_bots/ucm_graph20_noreward.geojson"
@@ -18,5 +18,5 @@ host: 127.0.0.1
 port: 12346
 # LTL generation?
 ltl: False
-promela_template: "./app/resources/specs/promela_template.txt"
-spin_path: "/Users/marcos/Desktop/spin"
+promela_template: "app/resources/context/formal_verification/promela_template.txt"
+spin_path: "spin"

@@ -15,7 +15,13 @@ ARG SPOT_VERSION
 
 ENV MAKEFLAGS="-j4"
 
-RUN apt-get update && apt-get install -y spin
+RUN wget https://github.com/nimble-code/Spin/archive/refs/tags/version-6.5.2.tar.gz && \
+    gunzip *.tar.gz && \
+    tar -xf *.tar && \
+    cd Spin-version-6.5.2/Bin && \
+    gunzip spin651_linux64.gz && \
+    ./spin651_linux64 -V && \
+    mv ./spin651_linux64 /usr/local/bin/spin
 
 RUN if test "$BUILD_SPOT" = "true"; then \
         echo "Building SPOT from source..." && \

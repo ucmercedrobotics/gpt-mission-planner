@@ -7,3 +7,5 @@ types-PyYAML==6.0.12.20241230
 aisuite[anthropic]==0.1.10
 aisuite[openai]==0.1.10
 docstring-parser==0.16
+# sandbox
+ipykernel==6.29.5

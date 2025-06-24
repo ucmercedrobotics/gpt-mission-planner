@@ -90,7 +90,7 @@ def iros_2025_context(schema: str) -> list:
                     When generating task names in the XML mission, they MUST be descriptive as someone will be reading them. \
                     It is critical that the XML validates against the schema and that the schema location attribute is included in the root tag. \
                     Please include the XSI schema location every time you generate a mission with it\'s namespace in the attribute. \
-                    For example, `xsi:schemaLocation="https://robotics.ucmerced.edu/task ./app/resources/context/wheeled_bots/schema.xsd">` \
+                    For example, `xsi:schemaLocation="https://robotics.ucmerced.edu/task <path_to_schema>.xsd">` \
                     The mission must be syntactically correct and validate using an XML linter: '
             + schema,
         },

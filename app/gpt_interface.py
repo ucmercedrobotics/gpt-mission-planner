@@ -1,7 +1,7 @@
 import logging
 
 from dotenv import load_dotenv
-import aisuite as ai
+from litellm import completion
 
 from context import iros_2025_context, verification_agent_context
 
@@ -22,8 +22,6 @@ class LLMInterface:
         self.temperature: float = temperature
         # loading in secret API token from your env file
         load_dotenv(token_path)
-        # binding LLM client
-        self.client: ai.Client = ai.Client()
         # which model to use?
         self.model: str = model
         # schema text
@@ -87,11 +85,13 @@ class LLMInterface:
         message: list = self.context.copy()
         message.append({"role": "user", "content": prompt})
 
-        completion = self.client.chat.completions.create(
+        self.logger.debug(f"Sending prompt to {self.model}: {message}")
+
+        cmp = completion(
             model=self.model, messages=message, temperature=self.temperature
         )
 
-        response: str | None = completion.choices[0].message.content
+        response: str | None = cmp.choices[0].message.content
 
         if add_context:
             self.add_context(prompt, response)

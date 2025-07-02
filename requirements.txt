@@ -4,8 +4,7 @@ lxml-stubs==0.5.1
 python-dotenv==1.0.1
 PyYAML==6.0.2
 types-PyYAML==6.0.12.20241230
-aisuite[anthropic]==0.1.10
-aisuite[openai]==0.1.10
 docstring-parser==0.16
+litellm==1.73.6
 # sandbox
 ipykernel==6.29.5

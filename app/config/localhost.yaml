@@ -9,12 +9,12 @@ log_directory: "./app/gpt_outputs/"
 # schema per 1872.1-2024 + farm layout
 schema:
   - "schemas/schemas/clearpath_husky.xsd"
-context_files:
-  - "./app/resources/context/wheeled_bots/reza20.geojson"
+# context_files:
+#   - "./app/resources/context/wheeled_bots/reza20.geojson"
 # who to send this too?
 host: 127.0.0.1
 port: 12346
 # LTL generation?
-ltl: True
+ltl: False
 promela_template: "app/resources/context/formal_verification/promela_template.txt"
 spin_path: "spin"

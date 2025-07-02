@@ -27,8 +27,9 @@ from utils.spot_utils import generate_accepting_run_string, count_ltl_tasks
 LTL_KEY: str = "ltl"
 PROMELA_TEMPLATE_KEY: str = "promela_template"
 SPIN_PATH_KEY: str = "spin_path"
-CHATGPT4O: str = "openai:gpt-4o"
-CLAUDE37: str = "anthropic:claude-3-7-sonnet-20250219"
+CHATGPT: str = "openai/o3"
+CLAUDE: str = "claude-sonnet-4-20250514"
+GEMINI: str = "gemini/gemini-2.5-pro"
 # TODO: remove this
 HUMAN_REVIEW: bool = False
 EXAMPLE_RUNS: int = 5
@@ -66,7 +67,7 @@ class MissionPlanner:
         self.retry: int = -1
         # init gpt interface
         self.gpt: LLMInterface = LLMInterface(
-            self.logger, token_path, CLAUDE37, max_tokens, temperature
+            self.logger, token_path, CLAUDE, max_tokens, temperature
         )
         self.gpt.init_context(self.schema_paths, self.context_files)
         # init Promela compiler
@@ -76,11 +77,11 @@ class MissionPlanner:
             self.human_review: bool = HUMAN_REVIEW
             # init XML mission gpt interface
             self.pml_gpt: LLMInterface = LLMInterface(
-                self.logger, token_path, CLAUDE37, max_tokens, temperature
+                self.logger, token_path, CLAUDE, max_tokens, temperature
             )
             # Claude human verification substitute
             self.verification_checker: LLMInterface = LLMInterface(
-                self.logger, token_path, CHATGPT4O, max_tokens, temperature
+                self.logger, token_path, CHATGPT, max_tokens, temperature
             )
             # object for compiling Promela from XML
             self.promela: PromelaCompiler = PromelaCompiler(
@@ -477,6 +478,7 @@ def main(config: str):
         # OpenAI loggers turned off completely.
         logging.getLogger("openai").setLevel(logging.CRITICAL)
         logging.getLogger("anthropic").setLevel(logging.CRITICAL)
+        logging.getLogger("LiteLLM").setLevel(logging.CRITICAL)
         logging.getLogger("httpx").setLevel(logging.CRITICAL)
         logging.getLogger("httpcore").setLevel(logging.CRITICAL)
         logger: logging.Logger = logging.getLogger()

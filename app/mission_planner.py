@@ -27,8 +27,8 @@ from utils.spot_utils import generate_accepting_run_string, count_ltl_tasks
 LTL_KEY: str = "ltl"
 PROMELA_TEMPLATE_KEY: str = "promela_template"
 SPIN_PATH_KEY: str = "spin_path"
-CHATGPT4O: str = "openai:gpt-4o"
-CLAUDE37: str = "anthropic:claude-3-7-sonnet-20250219"
+CHATGPTO3: str = "openai:o3"
+CLAUDE4: str = "anthropic:claude-sonnet-4-20250514"
 # TODO: remove this
 HUMAN_REVIEW: bool = False
 EXAMPLE_RUNS: int = 5
@@ -66,7 +66,7 @@ class MissionPlanner:
         self.retry: int = -1
         # init gpt interface
         self.gpt: LLMInterface = LLMInterface(
-            self.logger, token_path, CLAUDE37, max_tokens, temperature
+            self.logger, token_path, CHATGPTO3, max_tokens, temperature
         )
         self.gpt.init_context(self.schema_paths, self.context_files)
         # init Promela compiler
@@ -76,11 +76,11 @@ class MissionPlanner:
             self.human_review: bool = HUMAN_REVIEW
             # init XML mission gpt interface
             self.pml_gpt: LLMInterface = LLMInterface(
-                self.logger, token_path, CLAUDE37, max_tokens, temperature
+                self.logger, token_path, CLAUDE4, max_tokens, temperature
             )
-            # Claude human verification substitute
+            # human verification substitute
             self.verification_checker: LLMInterface = LLMInterface(
-                self.logger, token_path, CHATGPT4O, max_tokens, temperature
+                self.logger, token_path, CHATGPTO3, max_tokens, temperature
             )
             # object for compiling Promela from XML
             self.promela: PromelaCompiler = PromelaCompiler(
@@ -145,7 +145,7 @@ class MissionPlanner:
                 if not self.ltl_valid and self.ltl:
                     try:
                         ltl_out, ltl_task_count = self._generate_ltl(ltl_input)
-                    except Exception as e:
+                    except ValueError as e:
                         self.logger.debug(str(e))
                         ret = False
                         ltl_input = str(e)
@@ -171,12 +171,19 @@ class MissionPlanner:
                         ret = False
                         continue
 
+                    self.logger.debug(
+                        f"XML task count: {xml_task_count}, LTL task count: {ltl_task_count}"
+                    )
+
                     # checking syntax of LTL since promela is manually created
                     ret, err = self._formal_verification(xml_out, ltl_out)
                     if not ret:
                         self.retry += 1
                         self.pml_gpt.add_context(err)
                         continue
+                    self.logger.debug(
+                        f"Promela file generated at {self.promela_path} with LTL: {ltl_out}"
+                    )
                     # does Arbiter LLM or the human agree?
                     ret, err = self._spot_verification(mp_input)
                     if not ret:
@@ -186,6 +193,9 @@ class MissionPlanner:
                         )
                         self.ltl_valid = False
                         continue
+
+                    self.logger.debug("Arbiter LLM or human approved the mission plan.")
+
                     self.ltl_valid = True
                     # did you generate a trail file?
                     ret, err = self._evaluate_spin_trail()
@@ -195,6 +205,10 @@ class MissionPlanner:
                         # we assume that if claude or human passed the ltl, it's the XML
                         self.xml_valid = False
                         continue
+
+                    self.logger.debug(
+                        "SPIN validation passed successfully. Mission plan is valid."
+                    )
 
                 # failure of this will only occur if formal verification was enabled.
                 # otherwise it sends out XML mission via TCP
@@ -241,11 +255,16 @@ class MissionPlanner:
         self.logger.debug(ltl_out)
         # parse out LTL statement
         ltl: str = parse_code(ltl_out, "ltl")
+        # check if LTL has mismatched parentheses
         _, e = execute_shell_cmd([self.spin_path, "-f", ltl])
         if "parentheses" in str(e).lower():
             self.logger.debug(str(e))
             raise Exception("parentheses not balanced")
-        # ask SPOT/Claude to generate automata for arbiter
+        # mm_count, e = check_parentheses_mismatch(ltl)
+        # if mm_count > 0:
+        #     self.logger.error(f"Parentheses mismatch in LTL: {e}")
+        #     raise ValueError(e)
+
         self.aut = self._ask_spot()
         task_count = count_ltl_tasks(self.aut)
 
@@ -286,6 +305,11 @@ class MissionPlanner:
                     spot_in = str(e)
                 else:
                     spot_in = matches[0]
+                # check if LTL has mismatched parentheses
+                # mm_count, exc = check_parentheses_mismatch(spot_out)
+                # if mm_count > 0:
+                #     self.logger.error(f"Parentheses mismatch in LTL for SPOT: {exc}")
+                #     spot_in = exc
                 self.retry += 1
 
         if aut is None:
@@ -335,6 +359,7 @@ class MissionPlanner:
 
     def _ltl_validation(self, promela_string: str, ltl_out: str) -> Tuple[bool, str]:
         ret: bool = False
+        exc: str = ""
         task_names: str = self.promela.get_task_names()
         globals: str = self.promela.get_globals()
         # this begins the second phase of the formal verification
@@ -347,23 +372,30 @@ class MissionPlanner:
             + globals
         )
 
-        ltl_out, _ = self._generate_ltl(prompt)
-        # append to promela file
-        new_promela_string: str = promela_string + "\n" + ltl_out
-        # write pml system and LTL to file
-        self.promela_path = write_out_file(self.log_directory, new_promela_string)
-        # execute spin verification
-        # TODO: this output isn't as useful as trail file, maybe can use later if needed.
-        cli_ret, e = execute_shell_cmd(
-            [self.spin_path, "-search", "-a", "-O2", self.promela_path]
-        )
-        # if you didn't get an error from validation step, no more retries
-        if cli_ret != 0:
-            self.logger.error(f"Failed to execute spin command with syntax error: {e}")
-        else:
-            ret = True
+        try:
+            ltl_out, _ = self._generate_ltl(prompt)
+            # append to promela file
+            new_promela_string: str = promela_string + "\n" + ltl_out
+            # write pml system and LTL to file
+            self.promela_path = write_out_file(self.log_directory, new_promela_string)
+            # execute spin verification
+            # TODO: this output isn't as useful as trail file, maybe can use later if needed.
+            cli_ret, e = execute_shell_cmd(
+                [self.spin_path, "-search", "-a", "-O2", self.promela_path]
+            )
+            # if you didn't get an error from validation step, no more retries
+            if cli_ret != 0:
+                self.logger.error(
+                    f"Failed to execute spin command with syntax error: {e}"
+                )
+            else:
+                ret = True
+        except ValueError as e:
+            self.logger.error(f"Failed to generate LTL: {str(e)}")
+            ret = False
+            exc = str(e)
 
-        return ret, e
+        return ret, exc
 
     def _spot_verification(self, mission_query: str) -> Tuple[bool, str]:
         ret: bool = False

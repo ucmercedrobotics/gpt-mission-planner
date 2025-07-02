@@ -87,9 +87,14 @@ class LLMInterface:
         message: list = self.context.copy()
         message.append({"role": "user", "content": prompt})
 
-        completion = self.client.chat.completions.create(
-            model=self.model, messages=message, temperature=self.temperature
-        )
+        try:
+            completion = self.client.chat.completions.create(
+                model=self.model, messages=message, temperature=self.temperature
+            )
+        except ai.provider.LLMError as e:
+            completion = self.client.chat.completions.create(
+                model=self.model, messages=message
+            )
 
         response: str | None = completion.choices[0].message.content
 

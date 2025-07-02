@@ -73,7 +73,7 @@ def iros_2025_context(schema: str) -> list:
     # default context
     context: list = [
         {
-            "role": "user",
+            "role": "system",
             "content": "You are a mission planner that generates navigational XML mission plans based on robotic task representation. \
                         When asked to generate a mission, create an XML file conformant to the known schema and \
                         use the GeoJSON file to provide references in the mission plan for things such as GPS location, tree type, etc. \

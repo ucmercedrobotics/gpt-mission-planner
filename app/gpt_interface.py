@@ -3,7 +3,7 @@ import logging
 from dotenv import load_dotenv
 from litellm import completion
 
-from context import iros_2025_context, verification_agent_context
+from context import icra_2026_context, verification_agent_context
 
 
 class LLMInterface:
@@ -37,7 +37,7 @@ class LLMInterface:
             self._set_schema(s)
 
         # context can be updated from context.py
-        self.context = iros_2025_context(self.schemas)
+        self.context = icra_2026_context(self.schemas)
 
         # this could be empty
         if context_files is not None:
@@ -84,8 +84,6 @@ class LLMInterface:
     def ask_gpt(self, prompt: str, add_context: bool = False) -> str | None:
         message: list = self.context.copy()
         message.append({"role": "user", "content": prompt})
-
-        self.logger.debug(f"Sending prompt to {self.model}: {message}")
 
         cmp = completion(
             model=self.model, messages=message, temperature=self.temperature

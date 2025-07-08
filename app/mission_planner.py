@@ -5,7 +5,6 @@ from typing import Tuple, Any
 import click
 import yaml
 import spot
-import re
 
 from gpt_interface import LLMInterface
 from network_interface import NetworkInterface
@@ -20,15 +19,19 @@ from utils.xml_utils import (
     count_xml_tasks,
 )
 from promela_compiler import PromelaCompiler
-from context import SPOT_CONTEXT
-from utils.spot_utils import generate_accepting_run_string, count_ltl_tasks
+from utils.spot_utils import (
+    generate_accepting_run_string,
+    count_ltl_tasks,
+    regex_spin_to_spot,
+)
 
 
 LTL_KEY: str = "ltl"
 PROMELA_TEMPLATE_KEY: str = "promela_template"
 SPIN_PATH_KEY: str = "spin_path"
-CHATGPT: str = "openai/o3"
-CLAUDE: str = "claude-sonnet-4-20250514"
+OPENAI: str = "openai/o3"
+# ANTHROPIC: str = "claude-3-7-sonnet-20250219"
+ANTHROPIC: str = "claude-sonnet-4-20250514"
 GEMINI: str = "gemini/gemini-2.5-pro"
 # TODO: remove this
 HUMAN_REVIEW: bool = False
@@ -67,7 +70,7 @@ class MissionPlanner:
         self.retry: int = -1
         # init gpt interface
         self.gpt: LLMInterface = LLMInterface(
-            self.logger, token_path, CLAUDE, max_tokens, temperature
+            self.logger, token_path, ANTHROPIC, max_tokens, temperature=temperature
         )
         self.gpt.init_context(self.schema_paths, self.context_files)
         # init Promela compiler
@@ -77,11 +80,11 @@ class MissionPlanner:
             self.human_review: bool = HUMAN_REVIEW
             # init XML mission gpt interface
             self.pml_gpt: LLMInterface = LLMInterface(
-                self.logger, token_path, CLAUDE, max_tokens, temperature
+                self.logger, token_path, ANTHROPIC, max_tokens, temperature=temperature
             )
             # Claude human verification substitute
             self.verification_checker: LLMInterface = LLMInterface(
-                self.logger, token_path, CHATGPT, max_tokens, temperature
+                self.logger, token_path, OPENAI, max_tokens, temperature=temperature
             )
             # object for compiling Promela from XML
             self.promela: PromelaCompiler = PromelaCompiler(
@@ -159,11 +162,13 @@ class MissionPlanner:
                     # preliminary check, but can be improved to be more thorough
                     if ltl_task_count != xml_task_count:
                         reconsider: str = (
-                            f"You and another agent generated a different number of tasks for this mission. Reconsider and give me another answer."
+                            f"You and another agent generated a different number of tasks for this mission. \
+                                If you believe your mission is correct, don't adjust. Otherwise, please adjust your response.\
+                                Answer only with the full XML mission."
                         )
                         xml_input = reconsider
-                        ltl_input = reconsider
                         self.xml_valid = False
+                        ltl_input = reconsider
                         self.ltl_valid = False
                         self.retry += 1
                         self.logger.warning(
@@ -242,57 +247,18 @@ class MissionPlanner:
         self.logger.debug(ltl_out)
         # parse out LTL statement
         ltl: str = parse_code(ltl_out, "ltl")
-        _, e = execute_shell_cmd([self.spin_path, "-f", ltl])
-        if "parentheses" in str(e).lower():
-            self.logger.debug(str(e))
-            raise Exception("parentheses not balanced")
+
         # ask SPOT/Claude to generate automata for arbiter
-        self.aut = self._ask_spot()
+        self.aut = self._convert_to_spot(ltl)
         task_count = count_ltl_tasks(self.aut)
 
         return ltl, task_count
 
-    def _ask_spot(self) -> Any:
-        """Custom Spot helper function for decoding LTL with error handling
+    def _convert_to_spot(self, ltl: str) -> Any:
+        """Custom Spot helper function for decoding LTL with error handling"""
+        spot_out: str = regex_spin_to_spot(ltl)
 
-        Returns:
-            _type_: _description_
-        """
-        spot_in: str = SPOT_CONTEXT
-        original_context: int = len(self.pml_gpt.context)
-
-        while self.retry < self.max_retries:
-            spot_out: str | None = self.pml_gpt.ask_gpt(spot_in, True)
-            self.logger.debug(spot_out)
-            spot_out = parse_code(spot_out, "ltl")
-            assert isinstance(spot_out, str)
-
-            # FOR SOME REASON SPOT REQUIRES AN EVENTUALLY CLAUSE
-            if spot_out[0] != "<":
-                spot_out = "<>(" + spot_out + ")"
-
-            try:
-                aut = spot.translate(spot_out)
-                break
-            # this catch is for SPOT specific error messages.
-            except Exception as e:
-                self.logger.debug(f"Failed Spot translate: {str(e)}")
-                aut = None
-                pattern = r"(syntax error.*(?:\n[^\n]*)?)"
-                matches = re.findall(pattern, str(e))
-                if len(matches) == 0:
-                    pattern = r"((?:\n[^\n]*).*parenthesis.*(?:\n[^\n]*)?)"
-                matches = re.findall(pattern, str(e))
-                if len(matches) == 0:
-                    spot_in = str(e)
-                else:
-                    spot_in = matches[0]
-                self.retry += 1
-
-        if aut is None:
-            raise TimeoutError
-
-        self.pml_gpt.reset_context(original_context)
+        aut = spot.translate(spot_out)
 
         return aut
 
@@ -429,6 +395,8 @@ class MissionPlanner:
     def _evaluate_spin_trail(self) -> Tuple[bool, str]:
         pml_file: str = self.promela_path.split("/")[-1]
         e: str = ""
+        ret: bool = True
+
         # trail file means you failed
         if os.path.isfile(pml_file + ".trail"):
             # move trail file since the promela file gets sent to self.log_directory
@@ -448,9 +416,7 @@ class MissionPlanner:
             self.logger.debug(
                 "Retrying after failing to pass formal validation step..."
             )
-        # no trail file, success
-        else:
-            ret = True
+            ret = False
 
         return ret, e
 

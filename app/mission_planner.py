@@ -53,7 +53,7 @@ class MissionPlanner:
         self.context_files: list[str] = context_files
         # logging GPT output folder, make if not there
         self.log_directory: str = log_directory
-        os.makedirs(self.log_directory, mode=777, exist_ok=True)
+        os.makedirs(self.log_directory, mode=0o777, exist_ok=True)
         # keeping track of validation status
         self.xml_valid: bool = False
         self.ltl_valid: bool = False

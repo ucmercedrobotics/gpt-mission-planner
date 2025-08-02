@@ -1,0 +1,22 @@
+FARM LAYOUT:
+Polygon corners (approximate GPS coordinates):
+
+Top Left (NW) (tree 1): 37.26643908, -120.42079453
+
+Top Right (NE): 37.26644777, -120.42012318
+
+Bottom Left (SW): 37.26578751, -120.42079999
+
+Bottom Right (SE) (tree 144): 37.26578860, -120.42011635
+
+Grid size:
+
+Rows: 18 (indexed 1 to 18)
+
+Columns: 8 (indexed 1 to 8)
+
+Total trees: 18 × 8 = 144 trees
+
+Numbering: one-based indexing, ordered left-to-right, top-to-bottom (like reading a book) for all trees. i.e tree 1 is row 1, column 1.
+
+DO NOT EXPLAIN YOUR ANSWERS. JUST GIVE ROW, COLUMN, GPS

@@ -1,5 +1,5 @@
-CONTAINER_NAME := gpt-mission-planner
-REPO_NAME := gpt-mission-planner
+IMAGE := ghcr.io/ucmercedrobotics/gpt-mission-planner
+WORKSPACE := gpt-mission-planner
 CONFIG := ./app/config/localhost.yaml
 
 # set PLATFORM to linux/arm64 on silicon mac, otherwise linux/amd64
@@ -23,18 +23,22 @@ build-image:
 		--platform=$(PLATFORM) \
 		--build-arg ENABLE_VERIFICATION=$(ENABLE_VERIFICATION) \
 		--build-arg BUILD_SPOT=$(BUILD_SPOT) \
-		. -t ${CONTAINER_NAME} --target local
+		. -t ${IMAGE} --target local
 
 bash:
 	docker run -it --rm \
 		--platform=$(PLATFORM) \
-		-v ./Makefile:/${REPO_NAME}/Makefile:Z \
-		-v ./app/:/${REPO_NAME}/app:Z \
-		-v ./schemas/:/${REPO_NAME}/schemas:Z \
+		-v ./Makefile:/${WORKSPACE}/Makefile:Z \
+		-v ./app/:/${WORKSPACE}/app:Z \
+		-v ./schemas/:/${WORKSPACE}/schemas:Z \
 		--env-file .env \
 		--net=host \
-		${CONTAINER_NAME} \
+		${IMAGE} \
 		/bin/bash
+
+shell:
+	CONTAINER_PS=$(shell docker ps -aq --filter ancestor=${IMAGE}) && \
+	docker exec -it $${CONTAINER_PS} bash
 
 run:
 	python3 ./app/mission_planner.py --config ${CONFIG}

@@ -21,7 +21,7 @@ ARG SPIN_FILE
 
 ENV MAKEFLAGS=-j4
 
-RUN apt update && apt-install byacc flex graphviz
+RUN apt update && apt install -y byacc flex graphviz
 
 RUN set -e; if test "$ENABLE_VERIFICATION" = true; then \
   curl -Lo- https://github.com/nimble-code/Spin/archive/refs/tags/version-${SPIN_VERSION}.tar.gz | \
@@ -33,16 +33,12 @@ RUN set -e; if test "$ENABLE_VERIFICATION" = true; then \
     tar -xzf-; cd spot-${SPOT_VERSION}; ./configure; make; make install; \
   else \
     curl -o- https://www.lrde.epita.fr/repo/debian.gpg | apt-key add -; \
-    echo 'deb http://www.lrde.epita.fr/repo/debian/ stable/' >> /etc/apt/sources.list && \
-    apt-get update; apt-get install -y spot libspot-dev python3-spot; \
+    echo 'deb https://www.lrde.epita.fr/repo/debian/ stable/' >> /etc/apt/sources.list && \
+    apt update; apt install -y spot libspot-dev python3-spot; \
   fi; \
 fi
 
-# ENV LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib"
-
-# RUN apt-get update && apt-get install -y spin
-
-RUN apt-get -y update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+RUN apt -y update && DEBIAN_FRONTEND=noninteractive apt install -y \
   software-properties-common build-essential wget netcat-openbsd vim
 
 # SPOT package is installed into python3 folder, not python3.11

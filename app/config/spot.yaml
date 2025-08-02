@@ -10,9 +10,19 @@ log_directory: "./app/gpt_outputs/"
 schema:
   - "schemas/schemas/bd_spot.xsd"
 context_files:
-  - "./app/resources/context/wheeled_bots/reza20.geojson"
+  # - "./app/resources/context/wheeled_bots/reza20.geojson"
+  - "./app/resources/context/wheeled_bots/reza_medium_polygon.txt"
+farm_polygon:
+  top_left: [-120.42079453, 37.26643908]
+  top_right: [-120.42012318, 37.26644777]
+  bottom_right: [-120.42011635, 37.26578860]
+  bottom_left: [-120.42079999, 37.26578751]
+  rows: 18
+  cols: 8
 # who to send this too?
 host: 127.0.0.1
 port: 12346
 # LTL generation?
 ltl: False
+promela_template: "app/resources/context/formal_verification/promela_template.txt"
+spin_path: "spin"

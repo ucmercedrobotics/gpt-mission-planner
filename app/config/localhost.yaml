@@ -11,7 +11,8 @@ schema:
   - "schemas/schemas/clearpath_husky.xsd"
 context_files:
   # - "./app/resources/context/wheeled_bots/reza20.geojson"
-  - "./app/resources/context/wheeled_bots/reza_medium_polygon.txt"
+  # - "./app/resources/context/wheeled_bots/reza_medium_polygon.txt"
+  - "./app/resources/context/wheeled_bots/greece.txt"
 farm_polygon:
   top_left: [-120.42079453, 37.26643908]
   top_right: [-120.42012318, 37.26644777]

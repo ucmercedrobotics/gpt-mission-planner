@@ -1,0 +1,10 @@
+## FIELD BOUNDARIES
+
+These are the field boundaries; DO NOT direct the robot beyond these:
+
+Upper left: 39.5124,22.4271
+Lower left: 39.5124,22.4266
+Upper right: 39.5121,22.4271
+Lower right: 39.5121,22.4266
+
+The robot begins near the lower right corner.

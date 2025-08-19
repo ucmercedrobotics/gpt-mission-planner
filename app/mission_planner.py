@@ -1,6 +1,7 @@
 import logging
 import os
 from typing import Tuple, Any
+import time
 
 import click
 import yaml
@@ -114,105 +115,102 @@ class MissionPlanner:
         self.ltl_valid = False
 
     def run(self) -> None:
-        while True:
-            ret: bool = False
-            self.reset()
-            # ask user for their mission plan
-            mp_input: str = input("Enter the specifications for your mission plan: ")
-            xml_input: str = mp_input
-            ltl_input: str = mp_input
-            while not ret and self.retry < self.max_retries:
-                # first ask of XML and LTL
-                if not self.xml_valid:
-                    try:
-                        ret, xml_out, xml_task_count = self._generate_xml(
-                            xml_input, True
-                        )
-                    except Exception as e:
-                        self.logger.debug(str(e))
-                        ret = False
-                        xml_input = str(e)
-                        self.retry += 1
-                        continue
-                    if not ret:
-                        xml_input = xml_out
-                        continue
-                    # store file for logs
-                    file_xml_out = write_out_file(self.log_directory, xml_out)
-                    self.logger.debug(f"Wrote out temp XML file: {file_xml_out}")
-                    self.xml_valid = True
-                if not self.ltl_valid and self.ltl:
-                    try:
-                        ltl_out, ltl_task_count = self._generate_ltl(ltl_input)
-                    except Exception as e:
-                        self.logger.debug(str(e))
-                        ret = False
-                        ltl_input = str(e)
-                        self.retry += 1
-                        continue
-                    self.ltl_valid = True
+        ret: bool = False
+        self.reset()
+        # ask user for their mission plan
+        mp_input: str = input("Enter the specifications for your mission plan: ")
+        xml_input: str = mp_input
+        ltl_input: str = mp_input
+        while not ret and self.retry < self.max_retries:
+            # first ask of XML and LTL
+            if not self.xml_valid:
+                try:
+                    ret, xml_out, xml_task_count = self._generate_xml(xml_input, True)
+                except Exception as e:
+                    self.logger.debug(str(e))
+                    ret = False
+                    xml_input = str(e)
+                    self.retry += 1
+                    continue
+                if not ret:
+                    xml_input = xml_out
+                    continue
+                # store file for logs
+                file_xml_out = write_out_file(self.log_directory, xml_out)
+                self.logger.debug(f"Wrote out temp XML file: {file_xml_out}")
+                self.xml_valid = True
+            if not self.ltl_valid and self.ltl:
+                try:
+                    ltl_out, ltl_task_count = self._generate_ltl(ltl_input)
+                except Exception as e:
+                    self.logger.debug(str(e))
+                    ret = False
+                    ltl_input = str(e)
+                    self.retry += 1
+                    continue
+                self.ltl_valid = True
 
-                # if we're formally verifying
-                if self.ltl:
-                    # preliminary check, but can be improved to be more thorough
-                    if ltl_task_count != xml_task_count:
-                        reconsider: str = (
-                            f"You and another agent generated a different number of tasks for this mission. \
-                                If you believe your mission is correct, don't adjust. Otherwise, please adjust your response.\
-                                Answer only with the full XML mission."
-                        )
-                        xml_input = reconsider
-                        self.xml_valid = False
-                        ltl_input = reconsider
-                        self.ltl_valid = False
-                        self.retry += 1
-                        self.logger.warning(
-                            f"Task count mismatch: {xml_task_count} != {ltl_task_count}"
-                        )
-                        ret = False
-                        continue
-
-                    # checking syntax of LTL since promela is manually created
-                    ret, err = self._formal_verification(xml_out, ltl_out)
-                    if not ret:
-                        self.retry += 1
-                        self.pml_gpt.add_context(err)
-                        continue
-                    # does Arbiter LLM or the human agree?
-                    ret, err = self._spot_verification(mp_input)
-                    if not ret:
-                        self.retry += 1
-                        self.pml_gpt.add_context(
-                            "A third party disagrees this is valid because: " + err
-                        )
-                        self.ltl_valid = False
-                        continue
-                    self.ltl_valid = True
-                    # did you generate a trail file?
-                    ret, err = self._evaluate_spin_trail()
-                    if not ret:
-                        xml_input = err
-                        self.retry += 1
-                        # we assume that if claude or human passed the ltl, it's the XML
-                        self.xml_valid = False
-                        continue
-
-                # failure of this will only occur if formal verification was enabled.
-                # otherwise it sends out XML mission via TCP
-                if ret:
-                    # send off mission plan to TCP client
-                    self.nic.send_file(file_xml_out)
-                    self.logger.debug(
-                        f"Sending mission XML {file_xml_out} out to robot over TCP..."
-                    )
-                else:
-                    self.logger.error("Unable to formally verify from your prompt...")
-                    # TODO: do we break here?
-
-            # clear before new query
-            self.gpt.reset_context(self.gpt.initial_context_length)
+            # if we're formally verifying
             if self.ltl:
-                self.pml_gpt.reset_context(self.pml_gpt.initial_context_length)
+                # preliminary check, but can be improved to be more thorough
+                if ltl_task_count != xml_task_count:
+                    reconsider: str = (
+                        f"You and another agent generated a different number of tasks for this mission. \
+                            If you believe your mission is correct, don't adjust. Otherwise, please adjust your response.\
+                            Answer only with the full XML mission."
+                    )
+                    xml_input = reconsider
+                    self.xml_valid = False
+                    ltl_input = reconsider
+                    self.ltl_valid = False
+                    self.retry += 1
+                    self.logger.warning(
+                        f"Task count mismatch: {xml_task_count} != {ltl_task_count}"
+                    )
+                    ret = False
+                    continue
+
+                # checking syntax of LTL since promela is manually created
+                ret, err = self._formal_verification(xml_out, ltl_out)
+                if not ret:
+                    self.retry += 1
+                    self.pml_gpt.add_context(err)
+                    continue
+                # does Arbiter LLM or the human agree?
+                ret, err = self._spot_verification(mp_input)
+                if not ret:
+                    self.retry += 1
+                    self.pml_gpt.add_context(
+                        "A third party disagrees this is valid because: " + err
+                    )
+                    self.ltl_valid = False
+                    continue
+                self.ltl_valid = True
+                # did you generate a trail file?
+                ret, err = self._evaluate_spin_trail()
+                if not ret:
+                    xml_input = err
+                    self.retry += 1
+                    # we assume that if claude or human passed the ltl, it's the XML
+                    self.xml_valid = False
+                    continue
+
+            # failure of this will only occur if formal verification was enabled.
+            # otherwise it sends out XML mission via TCP
+            if ret:
+                # send off mission plan to TCP client
+                self.nic.send_file(file_xml_out)
+                self.logger.debug(
+                    f"Sending mission XML {file_xml_out} out to robot over TCP..."
+                )
+            else:
+                self.logger.error("Unable to formally verify from your prompt...")
+                # TODO: do we break here?
+
+        # clear before new query
+        self.gpt.reset_context(self.gpt.initial_context_length)
+        if self.ltl:
+            self.pml_gpt.reset_context(self.pml_gpt.initial_context_length)
 
         # TODO: decide how the reuse flow works
         self.nic.close_socket()
@@ -479,11 +477,19 @@ def main(config: str):
             config_yaml["log_directory"],
             logger,
         )
-        mp.configure_network(config_yaml["host"], int(config_yaml["port"]))
     except yaml.YAMLError as exc:
         logger.error(f"Improper YAML config: {exc}")
 
-    mp.run()
+    while True:
+        try:
+            mp.configure_network(config_yaml["host"], int(config_yaml["port"]))
+        except ConnectionRefusedError:
+            logger.error(
+                f"Unable to connect to {config_yaml['host']}:{config_yaml['port']}. Is the server running? Robot could be busy executing a previous mission."
+            )
+            time.sleep(1)
+
+        mp.run()
 
 
 if __name__ == "__main__":

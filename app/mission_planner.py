@@ -18,6 +18,7 @@ from utils.xml_utils import (
     validate_output,
     count_xml_tasks,
 )
+from utils.gps_utils import TreePlacementGenerator
 from promela_compiler import PromelaCompiler
 
 LTL_KEY: str = "ltl"
@@ -38,6 +39,7 @@ class MissionPlanner:
         token_path: str,
         schema_paths: list[str],
         context_files: list[str],
+        tpg: TreePlacementGenerator,
         max_retries: int,
         max_tokens: int,
         temperature: float,
@@ -52,6 +54,9 @@ class MissionPlanner:
         # set schema and farm file paths
         self.schema_paths: list[str] = schema_paths
         self.context_files: list[str] = context_files
+        # tree placement generator init
+        self.tpg: TreePlacementGenerator = tpg
+        self.tree_points: list[dict[str, Any]] = self.tpg.generate_tree_points()
         # logging GPT output folder, make if not there
         self.log_directory: str = log_directory
         os.makedirs(self.log_directory, mode=0o777, exist_ok=True)
@@ -193,6 +198,16 @@ class MissionPlanner:
                     self.retry += 1
                     # we assume that if claude or human passed the ltl, it's the XML
                     self.xml_valid = False
+                    continue
+
+            if self.tpg is not None:
+                file_xml_out = self.tpg.replace_tree_ids_with_gps(file_xml_out)
+                self.logger.debug(f"Replaced tree IDs with GPS coordinates...")
+                ret, err = self._lint_xml(open(file_xml_out, "r").read())
+                if not ret:
+                    self.logger.error(
+                        f"Failed to lint XML after replacing tree IDs: {err}"
+                    )
                     continue
 
             # failure of this will only occur if formal verification was enabled.
@@ -449,10 +464,23 @@ def main(config: str):
         logging.getLogger("httpcore").setLevel(logging.CRITICAL)
         logger: logging.Logger = logging.getLogger()
 
+        # you don't necessarily need context
         if "context_files" in config_yaml:
             context_files = config_yaml["context_files"]
         else:
-            logger.info("No additional context files found. Proceeding...")
+            logger.warning("No additional context files found. Proceeding...")
+        if "farm_polygon" in config_yaml:
+            tpg = TreePlacementGenerator(
+                config_yaml["farm_polygon"]["points"],
+                config_yaml["farm_polygon"]["dimensions"],
+            )
+            logger.debug("Farm polygon points defined are: %s", tpg.polygon_coords)
+            logger.debug("Farm dimensions defined are: %s", tpg.dimensions)
+        else:
+            tpg = None
+            logger.warning(
+                "No farm polygon found. Assuming we're not dealing with mobile robots..."
+            )
 
         # if user specifies config key -> optional keys
         ltl = config_yaml.get(LTL_KEY) or False
@@ -468,6 +496,7 @@ def main(config: str):
             config_yaml["token"],
             config_yaml["schema"],
             context_files,
+            tpg,
             config_yaml["max_retries"],
             config_yaml["max_tokens"],
             config_yaml["temperature"],
@@ -488,6 +517,7 @@ def main(config: str):
                 f"Unable to connect to {config_yaml['host']}:{config_yaml['port']}. Is the server running? Robot could be busy executing a previous mission."
             )
             time.sleep(1)
+            continue
 
         mp.run()
 

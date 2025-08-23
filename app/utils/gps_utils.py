@@ -11,6 +11,9 @@ from typing import List, Tuple, Dict, Any, Optional
 import numpy as np
 from pyproj import Transformer
 from shapely.geometry import Polygon, LineString
+from lxml import etree
+
+from .xml_utils import NS
 
 
 class CoordinateSystem:
@@ -72,7 +75,11 @@ class TreePlacementGenerator:
     """Generates tree placement points within a polygon area."""
 
     def __init__(
-        self, epsg: int = CoordinateSystem.UTMZ10N, tolerance_pct: float = 0.01
+        self,
+        polygon_coords: list,
+        dimensions: list,
+        epsg: int = CoordinateSystem.UTMZ10N,
+        tolerance_pct: float = 0.01,
     ) -> None:
         """
         Initialize the tree placement generator.
@@ -83,21 +90,17 @@ class TreePlacementGenerator:
         """
         self.coord_system = CoordinateSystem(epsg)
         self.tolerance_pct = tolerance_pct
+        self.polygon_coords = self._make_polygon_array(polygon_coords)
+        self.dimensions = self._make_dimension_array(dimensions)
 
     def generate_tree_points(
         self,
-        polygon_coords: List[Tuple[float, float]],
-        top_edge_start: Tuple[float, float],
-        top_edge_end: Tuple[float, float],
-        trees_per_row: List[int],
     ) -> List[Dict[str, Any]]:
         """
         Generate tree placement points within a polygon.
 
         Args:
-            polygon_coords: List of (lon, lat) coordinates defining the polygon
-            top_edge_start: (lon, lat) coordinates of top edge start point
-            top_edge_end: (lon, lat) coordinates of top edge end point
+            polygon_coords: List of (lon, lat) coordinates defining the polygon. We assume index 0 -> 1 edge is north facing!!
             trees_per_row: List containing number of trees for each row
 
         Returns:
@@ -110,9 +113,10 @@ class TreePlacementGenerator:
         """
         # Convert to UTM and create polygon
         polygon_xy = [
-            self.coord_system.latlon_to_xy(lat, lon) for lon, lat in polygon_coords
+            self.coord_system.latlon_to_xy(lat, lon) for lon, lat in self.polygon_coords
         ]
-        poly = Polygon(polygon_xy)
+        top_edge_start = self.polygon_coords[0]
+        top_edge_end = self.polygon_coords[1]
 
         # Get top edge coordinates in UTM
         top_start_xy = self.coord_system.latlon_to_xy(
@@ -127,9 +131,79 @@ class TreePlacementGenerator:
         poly_local = self._transform_polygon_to_local(polygon_xy, rotation_info)
 
         # Generate tree points
-        return self._generate_points_in_local_system(
-            poly_local, trees_per_row, rotation_info
+        self.tree_points = self._generate_points_in_local_system(
+            poly_local, self.dimensions, rotation_info
         )
+        return self.tree_points
+
+    def replace_tree_ids_with_gps(self, xml_file: str) -> str:
+        """Replace tree IDs in the XML file with their GPS coordinates.
+
+        Args:
+            xml_file (str): Path to the XML file to modify.
+
+        Returns:
+            str: Path to the modified XML file.
+        """
+        # Load the XML string
+        root = etree.parse(xml_file).getroot()
+
+        # Find all tree elements and replace their IDs with GPS coordinates
+        for tree_elem in root.xpath(".//task:moveToGPSLocation", namespaces=NS):
+            id_elem = tree_elem.find(".//task:id", namespaces=NS)
+            id = id_elem.text
+            gps_coords = self.tree_points[int(id) - 1]
+            if gps_coords:
+                # Store the original tail whitespace before removing
+                tail_whitespace = id_elem.tail
+                # Remove the id element first
+                tree_elem.remove(id_elem)
+                # Create latitude element with proper indentation
+                lat_elem = etree.SubElement(
+                    tree_elem, etree.QName(NS["task"], "latitude")
+                )
+                lat_elem.text = str(gps_coords["lat"])
+                lat_elem.tail = tail_whitespace  # Preserve indentation
+                # Create longitude element with proper indentation
+                lon_elem = etree.SubElement(
+                    tree_elem, etree.QName(NS["task"], "longitude")
+                )
+                lon_elem.text = str(gps_coords["lon"])
+                lon_elem.tail = tail_whitespace  # Preserve indentation
+
+        # Write the modified XML back to the original file
+        # Ensure proper formatting by re-parsing and indenting
+        etree.indent(root, space="    ")  # 4 spaces indentation
+        with open(xml_file, "w", encoding="utf-8") as f:
+            f.write(etree.tostring(root, pretty_print=True, encoding="unicode"))
+
+        return xml_file
+
+    def _make_polygon_array(self, coords: list) -> np.ndarray:
+        """Create a 2D array representing the polygon coordinates."""
+        coords_array = []
+        for p in coords:
+            if len(p) != 2:
+                raise ValueError("Each coordinate must be a tuple of (lon, lat).")
+            lon = p["lon"]
+            lat = p["lat"]
+            # Create a 2D array for each coordinate
+            coords_array.append([lon, lat])
+        return np.array(coords_array, dtype=np.float64)
+
+    def _make_dimension_array(self, dimensions: list) -> np.ndarray:
+        """Create a 2D array representing the dimensions of the planting area."""
+        shape = []
+        for d in dimensions:
+            if len(d) != 2 or "row" not in d or "col" not in d:
+                raise ValueError(
+                    "Each dimension must be a dictionary with 'row' and 'col' keys."
+                )
+            col = d["col"]
+            row = d["row"]
+            # Create a 2D array for each dimension
+            shape += [col] * row
+        return np.array(shape, dtype=np.uint8)
 
     def _calculate_rotation(
         self, start_point: Tuple[float, float], end_point: Tuple[float, float]
@@ -276,60 +350,3 @@ class TreePlacementGenerator:
 
         # Convert back to lat/lon
         return self.coord_system.xy_to_latlon(x_global, y_global)
-
-
-# Convenience functions for backward compatibility
-def latlon_to_xy(lat: float, lon: float, epsg: int = 32610) -> Tuple[float, float]:
-    """
-    Convert latitude/longitude to UTM coordinates.
-
-    Args:
-        lat: Latitude in decimal degrees
-        lon: Longitude in decimal degrees
-        epsg: EPSG code for target projection (default: 32610)
-
-    Returns:
-        Tuple of (x, y) coordinates in UTM projection
-    """
-    coord_system = CoordinateSystem(epsg)
-    return coord_system.latlon_to_xy(lat, lon)
-
-
-def xy_to_latlon(x: float, y: float, epsg: int = 32610) -> Tuple[float, float]:
-    """
-    Convert UTM coordinates to latitude/longitude.
-
-    Args:
-        x: X coordinate in UTM projection
-        y: Y coordinate in UTM projection
-        epsg: EPSG code for source projection (default: 32610)
-
-    Returns:
-        Tuple of (lat, lon) in decimal degrees
-    """
-    coord_system = CoordinateSystem(epsg)
-    return coord_system.xy_to_latlon(x, y)
-
-
-def generate_tree_points(
-    polygon_coords: List[Tuple[float, float]],
-    top_edge_start: Tuple[float, float],
-    top_edge_end: Tuple[float, float],
-    trees_per_row: List[int],
-) -> List[Dict[str, Any]]:
-    """
-    Generate tree placement points within a polygon.
-
-    Args:
-        polygon_coords: List of (lon, lat) coordinates defining the polygon
-        top_edge_start: (lon, lat) coordinates of top edge start point
-        top_edge_end: (lon, lat) coordinates of top edge end point
-        trees_per_row: List containing number of trees for each row
-
-    Returns:
-        List of dictionaries containing tree placement information
-    """
-    generator = TreePlacementGenerator()
-    return generator.generate_tree_points(
-        polygon_coords, top_edge_start, top_edge_end, trees_per_row
-    )

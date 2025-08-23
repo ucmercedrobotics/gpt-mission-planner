@@ -19,7 +19,7 @@ repo-init:
 	git submodule update --init --recursive
 
 build-image:
-	docker build --load \
+	docker build \
 		--platform=$(PLATFORM) \
 		--build-arg ENABLE_VERIFICATION=$(ENABLE_VERIFICATION) \
 		--build-arg BUILD_SPOT=$(BUILD_SPOT) \

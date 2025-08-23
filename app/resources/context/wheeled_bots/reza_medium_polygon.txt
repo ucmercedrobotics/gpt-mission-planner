@@ -19,4 +19,4 @@ Total trees: 18 × 8 = 144 trees
 
 Numbering: one-based indexing, ordered left-to-right, top-to-bottom (like reading a book) for all trees. i.e tree 1 is row 1, column 1.
 
-DO NOT EXPLAIN YOUR ANSWERS. JUST GIVE ROW, COLUMN, GPS
+USE THIS INFORMATION TO SELECT TREES IN YOUR MISSION XML.

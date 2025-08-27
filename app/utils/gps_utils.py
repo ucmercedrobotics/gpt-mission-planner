@@ -79,7 +79,7 @@ class TreePlacementGenerator:
         polygon_coords: list,
         dimensions: list,
         epsg: int = CoordinateSystem.UTMZ10N,
-        tolerance_pct: float = 0.01,
+        tolerance_pct: float = 0.001,
     ) -> None:
         """
         Initialize the tree placement generator.
@@ -250,41 +250,38 @@ class TreePlacementGenerator:
         rotation_info: Dict[str, float],
     ) -> List[Dict[str, Any]]:
         """Generate tree points within the local coordinate system."""
-        min_x, min_y, max_x, max_y = poly_local.bounds
 
-        # Calculate effective bounds with tolerance buffer
-        height = max_y - min_y
-        tolerance = height * self.tolerance_pct
+        # Get polygon boundary coords (assumes 4-point polygon for orchard block)
+        coords = list(poly_local.exterior.coords)
+        # Order: top-left, top-right, bottom-right, bottom-left
+        top_left, top_right, bottom_right, bottom_left = (
+            coords[0],
+            coords[1],
+            coords[2],
+            coords[3],
+        )
 
-        effective_max_y = max_y - tolerance
-        effective_min_y = min_y + tolerance
-        effective_height = effective_max_y - effective_min_y
-
-        # Calculate row spacing
         rows = len(trees_per_row)
-        row_spacing = effective_height / (rows - 1) if rows > 1 else 0
-
         tree_points = []
         tree_counter = 1
 
         for row_index, num_trees in enumerate(trees_per_row):
-            y = effective_max_y - row_index * row_spacing
+            t = row_index / (rows - 1) if rows > 1 else 0  # interpolation factor
 
-            # Find polygon width at this y level
-            segment_coords = self._find_polygon_width_at_y(poly_local, y, min_x, max_x)
+            # Interpolate row start and end along polygon edges
+            row_start_x = (1 - t) * top_left[0] + t * bottom_left[0]
+            row_start_y = (1 - t) * top_left[1] + t * bottom_left[1]
+            row_end_x = (1 - t) * top_right[0] + t * bottom_right[0]
+            row_end_y = (1 - t) * top_right[1] + t * bottom_right[1]
 
-            if segment_coords is None:
-                continue
-
-            start_x, end_x = segment_coords
-
-            # Generate tree positions for this row
             for col_index in range(num_trees):
-                x = self._calculate_tree_x_position(
-                    start_x, end_x, col_index, num_trees
-                )
+                u = (
+                    col_index / (num_trees - 1) if num_trees > 1 else 0.5
+                )  # interpolation factor across row
+                x = (1 - u) * row_start_x + u * row_end_x
+                y = (1 - u) * row_start_y + u * row_end_y
 
-                # Transform back to global coordinates
+                # Transform back to global coords
                 lat, lon = self._transform_to_global_coords(x, y, rotation_info)
 
                 tree_points.append(

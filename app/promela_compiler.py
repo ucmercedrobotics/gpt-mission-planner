@@ -275,7 +275,7 @@ def main():
     logging.basicConfig(level=logging.DEBUG)
 
     pc: PromelaCompiler = PromelaCompiler(
-        "app/resources/context/wheeled_bots/promela_template.txt", logger
+        "app/resources/context/formal_verification/promela_template.txt", logger
     )
     # this should be the path to the XML mission file
     with open(sys.argv[1]) as fp:

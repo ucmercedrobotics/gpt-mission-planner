@@ -24,8 +24,8 @@ from promela_compiler import PromelaCompiler
 LTL_KEY: str = "ltl"
 PROMELA_TEMPLATE_KEY: str = "promela_template"
 SPIN_PATH_KEY: str = "spin_path"
-OPENAI: str = "openai/o3"
-# ANTHROPIC: str = "claude-3-7-sonnet-20250219"
+OPENAI: str = "openai/gpt-5"
+# ANTHROPIC: str = "claude-opus-4-1-20250805"
 ANTHROPIC: str = "claude-sonnet-4-20250514"
 GEMINI: str = "gemini/gemini-2.5-pro"
 # TODO: remove this

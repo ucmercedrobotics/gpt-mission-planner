@@ -2,6 +2,7 @@ import logging
 import os
 from typing import Tuple, Any
 import time
+import regex
 
 import click
 import yaml
@@ -18,6 +19,7 @@ from utils.xml_utils import (
     validate_output,
     count_xml_tasks,
 )
+from utils.spot_utils import add_init_state, init_state_macro
 from utils.gps_utils import TreePlacementGenerator
 from promela_compiler import PromelaCompiler
 
@@ -25,6 +27,7 @@ LTL_KEY: str = "ltl"
 PROMELA_TEMPLATE_KEY: str = "promela_template"
 SPIN_PATH_KEY: str = "spin_path"
 OPENAI: str = "openai/gpt-5"
+# OPENAI: str = "openai/gpt-5-mini"
 # ANTHROPIC: str = "claude-opus-4-1-20250805"
 ANTHROPIC: str = "claude-sonnet-4-20250514"
 GEMINI: str = "gemini/gemini-2.5-pro"
@@ -146,7 +149,7 @@ class MissionPlanner:
                 self.xml_valid = True
             if not self.ltl_valid and self.ltl:
                 try:
-                    ltl_out, ltl_task_count = self._generate_ltl(ltl_input)
+                    _, ltl_out, ltl_task_count = self._generate_ltl(ltl_input)
                 except Exception as e:
                     self.logger.debug(str(e))
                     ret = False
@@ -159,13 +162,16 @@ class MissionPlanner:
             if self.ltl:
                 # preliminary check, but can be improved to be more thorough
                 if ltl_task_count != xml_task_count:
-                    reconsider: str = (
-                        f"You and another agent generated a different number of tasks for this mission. \
-                            If you believe your mission is correct, don't adjust. Otherwise, please adjust your response.\
-                            Answer only with the full XML mission."
+                    more_less: str = (
+                        "more" if ltl_task_count > xml_task_count else "less"
                     )
-                    xml_input = reconsider
-                    self.xml_valid = False
+                    reconsider: str = (
+                        f"You have generated {more_less} tasks in your mission ({ltl_task_count}) than your planning agent counterpart. \
+                            Please reconsider how the mission can be interpreted and reformulate, if possible."
+                    )
+                    # NOTE: for now we'll assume XML is correct and LTL is wrong
+                    # xml_input = reconsider
+                    self.xml_valid = True
                     ltl_input = reconsider
                     self.ltl_valid = False
                     self.retry += 1
@@ -248,13 +254,14 @@ class MissionPlanner:
 
         return ret, xml, task_count
 
-    def _generate_ltl(self, prompt: str) -> Tuple[str, int]:
+    def _generate_ltl(self, prompt: str) -> Tuple[str, str, int]:
         from utils.spot_utils import count_ltl_tasks
 
         task_count: int = 0
         # use second GPT agent to generate LTL
         ltl_out: str | None = self.pml_gpt.ask_gpt(prompt, True)
         self.logger.debug(ltl_out)
+        macros: str = parse_code(ltl_out, "promela")
         # parse out LTL statement
         ltl: str = parse_code(ltl_out, "ltl")
 
@@ -262,7 +269,7 @@ class MissionPlanner:
         self.aut = self._convert_to_spot(ltl)
         task_count = count_ltl_tasks(self.aut)
 
-        return ltl, task_count
+        return macros, ltl, task_count
 
     def _convert_to_spot(self, ltl: str) -> Any:
         import spot
@@ -319,17 +326,19 @@ class MissionPlanner:
         globals: str = self.promela.get_globals()
         # this begins the second phase of the formal verification
         prompt: str = (
-            "You MUST use these Promela object names when generating the LTL. Otherwise syntax will be incorrect and SPIN will fail: "
+            "You MUST use these Promela object names when generating the LTL. Update the Promela macros and LTL to match and output both: "
             + "Tasks: \n"
             + task_names
             + "\n"
-            + "Sample returns: \n"
+            + "Sensor sample variable names: \n"
             + globals
         )
 
-        ltl_out, _ = self._generate_ltl(prompt)
+        macros, ltl_out, _ = self._generate_ltl(prompt)
+        macros = init_state_macro(macros)
+        ltl_out = add_init_state(ltl_out)
         # append to promela file
-        new_promela_string: str = promela_string + "\n" + ltl_out
+        new_promela_string: str = promela_string + "\n" + macros + "\n" + ltl_out
         # write pml system and LTL to file
         self.promela_path = write_out_file(self.log_directory, new_promela_string)
         # execute spin verification

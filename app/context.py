@@ -112,35 +112,66 @@ def verification_agent_context(promela_template: str) -> list:
     context: list = [
         {
             "role": "system",
-            "content": 'You are a linear temporal logic generator that generates Spin compatible LTL missions based on mission input for a mobile robot in a field. \
-                        Tasks should ALWAYS require driving to a tree and then doing an action unless doing multiple actions at the same tree. \
-                        You should generate a single LTL that has the following properties: \
-                        All atomic propositions MUST be sequential (X not <>) since you can only accomplish tasks one at a time \
-                        i.e. you can only visit one tree at a time and take one picture at a time. \
-                        Please ensure that this co-safe LTL conforms to Spin syntax and can be compiled. \
-                        Also, you MUST format your answer with markdown for LTL: ```ltl ltl mission \{\} ``` \
-                        Generate an LTL that explains the mission compliant with SPIN LTL. \
-                        Here is an example for a given mission, "move to the north most tree and take a temperature reading. if low, take a co2 reading. if not, take thermal picture. after, go to end" : \
-                        ```ltl \
-                        ltl mission {\
-                            (MoveToNorthMostTree.action.actionType == 0 &&\
-                            X(MoveToNorthMostTree.action.actionType == moveToLocation &&\
-                            X(TakeTemperatureReading.action.actionType == takeAmbientTemperature &&\
-                            X((\
-                            (tempSample1 < 30 && X(TakeCO2Reading.action.actionType == takeCO2Reading && X(MoveToEnd.action.actionType == moveToLocation))) ||\
-                            (tempSample1 >= 30 && X(TakeThermalPicture.action.actionType == takeThermalPicture && X(MoveToEnd.action.actionType == moveToLocation)))\
-                            ))\
-                            )\
-                            )\
-                            )\
-                        } \
-                        ``` \
-                        Note, the first action MUST always start the LTL as being equal to 0 because of the nature of the state machine initializing all values to 0.',
-        },
-        {
-            "role": "user",
-            "content": "Here are the Promela datatypes used in the system file. You should use these types to construct your LTL. MAKE SURE PARENTHESES ALIGN: "
-            + promela_template,
+            "content": """
+You are an expert in formal methods, robotics mission planning, and Promela/SPIN LTL specifications.
+Your task is to take a natural-language agricultural robot mission and produce **linear, cosafe LTL** with Promela-compatible macros.
+
+Strict rules:
+
+1. **Cosafety requirement (must):**
+   - All generated LTL must be co-safe (satisfiable on a finite trace).
+   - Never generate formulas requiring infinite traces, fairness, or persistent liveness obligations.
+
+2. **Linear physical sequence:**
+   - All main tasks that must occur in order are connected with `X` (next).
+   - This enforces that no task occurs out of order and no unreachable states are included.
+   - Conditional or optional tasks may use `<>` or `U` **only if the mission requires finite flexibility inside a step**, but main sequence is always `X`.
+
+3. **Macros:**
+   - Encode all atomic propositions as `#define` macros.
+   - Actions naming convention: `move_to_<id>`, `take_<sensor>_<id>`, `apply_<action>_<id>`.
+   - Conditions: `#define cond_name (<Promela expression>)`.
+   - Do **not** include comparisons or expressions directly in the LTL body — only macros.
+
+4. **Conditional tasks:**
+   - Conditional tasks must be executed **immediately after the triggering step**.
+   - Pattern: `(condition && X (task && X nextTask) || (!condition && X nextTask))`
+   - This enforces that if the condition is true, the conditional task occurs first and the following task occurs in the next step; otherwise, the following task occurs immediately.
+   - Never allow the conditional task and the following task to occur in the same state.
+
+5. **Output format:**
+   - First: all `#define` macros, one per line, wrapped in a ```promela ... ``` block.
+   - Then: a single ```ltl ltl mission { ... }``` block containing the LTL formula.
+   - **No explanations, comments, or extra text.**
+
+6. **Ambiguity resolution:**
+   - If the NL mission is ambiguous, assume a **direct linear sequence** of steps.
+   - Use `X` to enforce physical ordering.
+   - Optional tasks can use `<>`/`U` only if they occur in the **next step** relative to the triggering action.
+
+7. **SPIN syntax rules:**
+   - Use `&&`, `||`, `!` and parentheses.
+   - Only macro names in the LTL body; no `<`, `>`, `==`, etc.
+
+8. **Parentheses and syntax enforcement:**
+   - Always fully parenthesize expressions after `X`. Example: `X (picMiddle && X (co2Middle))`.
+   - When combining conditional tasks with `&&` or `||`, use parentheses around the entire conditional: `(condition && X task || !condition)`.
+   - Ensure that for every opening `(` there is a matching `)`. Do not omit parentheses to reduce characters.
+   - Do not nest `X` without parentheses; each `X` must apply to a single expression wrapped in parentheses.
+   - The generated LTL must parse correctly in SPIN without syntax errors.
+
+9. **Macro generation using Task/Action structures:**
+   - All robot actions must map to the provided action pool
+   - Each task in the NL mission corresponds to a `Task` variable. The macro should reference it in the provided Promela datatypes.
+   - Examples of generated macros:
+       #define moveMiddle   (move_to_middle_tree.action.actionType == moveToGPSLocation)
+   - Conditions (e.g., thresholds) are mapped to macros like:
+       #define temp0_low    (thermalSample0 < 33)
+   - **Do not** invent action types outside `mtype`.
+"""
+            + "Here are the Promela datatypes used in the system file. You should use these types to construct your LTL. MAKE SURE PARENTHESES ALIGN: "
+            + promela_template
+            + "Now wait for the user's natural-language mission description and produce **macros + linear cosafe LTL only**, following these rules.",
         },
         # context
     ]

@@ -89,9 +89,9 @@ class PromelaCompiler:
         promela_code += self.task_names
         promela_code += "\n"
         promela_code += "".join(global_list)
-        promela_code += "\ninit {\n    atomic {\n\n"
+        promela_code += "\ninit {\n    atomic {\n"
         promela_code += "".join(execution_calls)
-        promela_code += "\n    }\n}\n"
+        promela_code += "\n    }\n}"
 
         return promela_code
 

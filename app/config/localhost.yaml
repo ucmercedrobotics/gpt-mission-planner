@@ -10,7 +10,7 @@ log_directory: "./app/gpt_outputs/icra"
 schema:
   - "schemas/schemas/clearpath_husky.xsd"
 context_files:
-  # - "./app/resources/context/wheeled_bots/reza20.geojson"
+  # - "./app/resources/context/wheeled_bots/thompson.txt"
   - "./app/resources/context/wheeled_bots/reza_medium_polygon.txt"
   # - "./app/resources/context/wheeled_bots/greece.txt"
 farm_polygon:
@@ -33,6 +33,6 @@ farm_polygon:
 host: 127.0.0.1
 port: 12346
 # LTL generation?
-ltl: True
+ltl: False
 promela_template: "app/resources/context/formal_verification/promela_template.txt"
 spin_path: "spin"

@@ -1,0 +1,40 @@
+FARM LAYOUT:
+Polygon corners (approximate GPS coordinates):
+
+Top Left (NW): 36.85817019481476, -119.62189612180204
+
+Top Right (NE): 36.858163689066394, -119.62092447481069
+
+Bottom Left (SW): 36.857415524310504, -119.62188392539628
+
+Bottom Right (SE): 36.85740088623136, -119.62093260574784
+
+The field dimensions are approximately:
+Width (NW → NE, west ↔ east): 86.7 m
+Height (NW → SW, north ↔ south): 83.8 m
+All rows go from north to south.
+Assume plant rows are 1 meter apart by default unless EXPLICTLY told.
+Do NOT send robots outside of these boundaries.
+
+MOVEMENT RULES:
+- Do NOT interpolate or invent GPS coordinates.
+- Only use GPS points explicitly provided in the mission or polygon.
+- If a move requires a GPS offset (e.g., 5 m forward), use relative movement instead of fabricating new latitude/longitude.
+- There should always be an orientation in between each movement: movement -> orientation -> actions -> movement
+- don't include explicit end movements, just terminate when finished
+
+TURNING RULES:
+Orientation control in yaw (rotation around vertical axis).
+If absolute=true, yaw is with respect to true north
+0 rad = north, pi/2 rad = west, -pi/2 rad = east, pi or -pi = south.
+If absolute=false, yaw is relative to the current heading
+0 rad = forward, pi/2 rad = left, -pi/2 rad = right, pi or -pi = backward.
+
+Relative movement in the robot's local body frame.
++X is always "forward" relative to the current heading,
+-X is backward.
+
+SEEDER RULES:
+- robot can plant from either side of the row
+- move -> orient -> select seed -> activate seeder -> move to plant -> deactivate -> orient (if planting another row)
+- if planting more than 1 of the same plant, no need to select seed again

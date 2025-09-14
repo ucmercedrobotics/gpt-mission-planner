@@ -17,6 +17,9 @@ Columns: 8 (indexed 1 to 8)
 
 Total trees: 18 × 8 = 144 trees
 
+RULES:
+
 Numbering: one-based indexing, ordered left-to-right, top-to-bottom (like reading a book) for all trees. i.e tree 1 is row 1, column 1.
+Tasks should almost always require driving to a tree and then doing an action unless doing multiple actions at the same tree.
 
 USE THIS INFORMATION TO SELECT TREES IN YOUR MISSION XML.

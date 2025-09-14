@@ -30,6 +30,7 @@ class LLMInterface:
         self.schemas: str = ""
         # context
         self.context: list = []
+        self.initial_context_length: int = 0
         # input template file provided when wanting spin verification
         self.promela_template: str = ""
         self.temperature: float = temperature
@@ -60,13 +61,12 @@ class LLMInterface:
         promela_template: str,
         context_files: list[str],
     ):
-        # TODO: I think we need a list of task names or a way to format the task naming based on some kind of standard
         for s in schema_path:
             # all robots must come with a schema
             self._set_schema(s)
 
         # default context
-        self.context = verification_agent_context(promela_template)
+        self.context = verification_agent_context(self.schemas, promela_template)
 
         # this could be empty
         if context_files is not None:

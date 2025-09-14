@@ -151,6 +151,9 @@ class TreePlacementGenerator:
         # Find all tree elements and replace their IDs with GPS coordinates
         for tree_elem in root.xpath(".//task:moveToGPSLocation", namespaces=NS):
             id_elem = tree_elem.find(".//task:id", namespaces=NS)
+            # we assume the LLM filled in the GPS, possibly on edge of polygon.
+            if id_elem is None:
+                continue
             id = id_elem.text
             gps_coords = self.tree_points[int(id) - 1]
             if gps_coords:

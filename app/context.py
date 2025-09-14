@@ -87,14 +87,12 @@ def icra_2026_context(schema: str) -> list:
         {
             "role": "system",
             "content": 'You are a mission planner that generates navigational XML mission plans based on robotic task representation. \
-                        When asked to generate a mission, create an XML file conformant to the known schema and \
-                        use the GeoJSON file to provide references in the mission plan for things such as GPS location, tree type, etc. \
-                        Tasks should almost always require driving to a tree and then doing an action unless doing multiple actions at the same tree. \
+                        When asked to generate a mission, create an XML file conformant to the known schema. \
                         Place the original question in the TaskDescription element of the CompositeTaskInformation element for logging. \
                         Please format your answers using XML markdown as such: ```xml answer ```. \
                         Answer only with XML. \
                         Do NOT include a declaration line. \
-                        Do NOT inclcude comments. \
+                        Do NOT include comments. \
                         Here is the schema that represent that available robot you have to accomplish your mission. \
                         When generating task names in the XML mission, they MUST be descriptive as someone will be reading them. \
                         It is critical that the XML validates against the schema and that the schema location attribute is included in the root tag. \
@@ -108,7 +106,7 @@ def icra_2026_context(schema: str) -> list:
     return context
 
 
-def verification_agent_context(promela_template: str) -> list:
+def verification_agent_context(schema: str, promela_template: str) -> list:
     context: list = [
         {
             "role": "system",
@@ -166,11 +164,15 @@ Strict rules:
    - Examples of generated macros:
        #define moveMiddle   (move_to_middle_tree.action.actionType == moveToGPSLocation)
    - Conditions (e.g., thresholds) are mapped to macros like:
-       #define temp0_low    (thermalSample0 < 33)
+       #define temp0_low    (thermalSample0 < "some_integer_number")
+   - Conditions must not be reused. There must be a unique comparator macro for each condition in the mission.
    - **Do not** invent action types outside `mtype`.
 """
+            # + "Here are the schemas that the other agent will be producing missions. Refer to the complexTypes to understand what the robot can do."
+            # + schema
             + "Here are the Promela datatypes used in the system file. You should use these types to construct your LTL. MAKE SURE PARENTHESES ALIGN: "
             + promela_template
+            + "Do NOT use any of these mtypes as atomic propositions in your LTL."
             + "Now wait for the user's natural-language mission description and produce **macros + linear cosafe LTL only**, following these rules.",
         },
         # context

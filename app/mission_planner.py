@@ -2,7 +2,6 @@ import logging
 import os
 from typing import Tuple, Any
 import time
-import regex
 
 import click
 import yaml
@@ -19,7 +18,7 @@ from utils.xml_utils import (
     validate_output,
     count_xml_tasks,
 )
-from utils.spot_utils import add_init_state, init_state_macro
+from utils.spot_utils import add_init_state, init_state_macro, rename_ltl_macros
 from utils.gps_utils import TreePlacementGenerator
 from promela_compiler import PromelaCompiler
 
@@ -58,8 +57,15 @@ class MissionPlanner:
         self.schema_paths: list[str] = schema_paths
         self.context_files: list[str] = context_files
         # tree placement generator init
-        self.tpg: TreePlacementGenerator = tpg
-        self.tree_points: list[dict[str, Any]] = self.tpg.generate_tree_points()
+        if tpg is not None:
+            self.tpg: TreePlacementGenerator = tpg
+            self.tree_points: list[dict[str, Any]] = self.tpg.generate_tree_points()
+        else:
+            self.logger.warning(
+                "No tree placement generator found. Assuming non-orchard environment..."
+            )
+            self.tpg = None
+            self.tree_points = []
         # logging GPT output folder, make if not there
         self.log_directory: str = log_directory
         os.makedirs(self.log_directory, mode=0o777, exist_ok=True)
@@ -149,7 +155,7 @@ class MissionPlanner:
                 self.xml_valid = True
             if not self.ltl_valid and self.ltl:
                 try:
-                    _, ltl_out, ltl_task_count = self._generate_ltl(ltl_input)
+                    macros, ltl_out, ltl_task_count = self._generate_ltl(ltl_input)
                 except Exception as e:
                     self.logger.debug(str(e))
                     ret = False
@@ -166,7 +172,7 @@ class MissionPlanner:
                         "more" if ltl_task_count > xml_task_count else "less"
                     )
                     reconsider: str = (
-                        f"You have generated {more_less} tasks in your mission ({ltl_task_count}) than your planning agent counterpart. \
+                        f"You have generated {abs(ltl_task_count - xml_task_count)} {more_less} tasks in your mission than your planning agent counterpart. \
                             Please reconsider how the mission can be interpreted and reformulate, if possible."
                     )
                     # NOTE: for now we'll assume XML is correct and LTL is wrong
@@ -181,14 +187,24 @@ class MissionPlanner:
                     ret = False
                     continue
 
+                self.logger.info("Generating Promela from mission...")
+                # from the mission output, create an XML tree
+                self.promela.init_xml_tree(xml_out)
+                # generate promela string that defines mission/system
+                promela_string: str = self.promela.parse_code()
+                # rename variables in LTL macros to match those used in XML/tasks
+                macros = rename_ltl_macros(
+                    self.promela.get_task_names(), self.promela.get_globals(), macros
+                )
+
                 # checking syntax of LTL since promela is manually created
-                ret, err = self._formal_verification(xml_out, ltl_out)
+                ret, err = self._formal_verification(promela_string, macros, ltl_out)
                 if not ret:
                     self.retry += 1
                     self.pml_gpt.add_context(err)
                     continue
                 # does Arbiter LLM or the human agree?
-                ret, err = self._spot_verification(mp_input)
+                ret, err = self._spot_verification(mp_input, macros)
                 if not ret:
                     self.retry += 1
                     self.pml_gpt.add_context(
@@ -260,10 +276,12 @@ class MissionPlanner:
         task_count: int = 0
         # use second GPT agent to generate LTL
         ltl_out: str | None = self.pml_gpt.ask_gpt(prompt, True)
-        self.logger.debug(ltl_out)
         macros: str = parse_code(ltl_out, "promela")
         # parse out LTL statement
         ltl: str = parse_code(ltl_out, "ltl")
+        self.logger.debug(f"Generated Promela macros: {macros}")
+
+        self.logger.debug(f"Generated LTL: {ltl}")
 
         # ask SPOT/Claude to generate automata for arbiter
         self.aut = self._convert_to_spot(ltl)
@@ -300,18 +318,16 @@ class MissionPlanner:
 
         return ret, e
 
-    def _formal_verification(self, xml_mp: str, ltl_out: str) -> Tuple[bool, str]:
+    def _formal_verification(
+        self, promela_string: str, macros: str, ltl_out: str
+    ) -> Tuple[bool, str]:
         ret: bool = False
 
-        self.logger.debug("Generating Promela from mission...")
-        # from the mission output, create an XML tree
-        self.promela.init_xml_tree(xml_mp)
-        # generate promela string that defines mission/system
-        promela_string: str = self.promela.parse_code()
-
+        self.logger.info("Performing formal verification of LTL mission plan...")
         # generates the LTL and verifies it with SPIN; retry enabled
-        ret, e = self._ltl_validation(promela_string, ltl_out)
+        ret, e = self._ltl_validation(promela_string, macros, ltl_out)
         if ret:
+            self.logger.info("Successful LTL mission plan generation...")
             self.logger.debug(f"Promela description in file {self.promela_path}.")
         else:
             self.logger.error(
@@ -320,23 +336,16 @@ class MissionPlanner:
 
         return ret, e
 
-    def _ltl_validation(self, promela_string: str, ltl_out: str) -> Tuple[bool, str]:
+    def _ltl_validation(
+        self, promela_string: str, macros: str, ltl_out: str
+    ) -> Tuple[bool, str]:
         ret: bool = False
-        task_names: str = self.promela.get_task_names()
-        globals: str = self.promela.get_globals()
-        # this begins the second phase of the formal verification
-        prompt: str = (
-            "You MUST use these Promela object names when generating the LTL. Update the Promela macros and LTL to match and output both: "
-            + "Tasks: \n"
-            + task_names
-            + "\n"
-            + "Sensor sample variable names: \n"
-            + globals
-        )
 
-        macros, ltl_out, _ = self._generate_ltl(prompt)
         macros = init_state_macro(macros)
         ltl_out = add_init_state(ltl_out)
+        self.logger.debug(f"Promela macros: {macros}")
+        self.logger.debug(f"Promela LTL: {ltl_out}")
+
         # append to promela file
         new_promela_string: str = promela_string + "\n" + macros + "\n" + ltl_out
         # write pml system and LTL to file
@@ -354,7 +363,7 @@ class MissionPlanner:
 
         return ret, e
 
-    def _spot_verification(self, mission_query: str) -> Tuple[bool, str]:
+    def _spot_verification(self, mission_query: str, macros: str) -> Tuple[bool, str]:
         from utils.spot_utils import generate_accepting_run_string
 
         ret: bool = False
@@ -369,7 +378,7 @@ class MissionPlanner:
             resp: str = ""
             while resp != ("y" or "n"):
                 resp = input(
-                    "Here are 3 example executions of your mission: "
+                    "Here are 5 example executions of your mission: "
                     + runs_str
                     + "\nNote, these are just several possible runs. \n\nType y/n."
                 )
@@ -389,8 +398,14 @@ class MissionPlanner:
             ask = (
                 'Please answer this with one word: "Yes" or "No". \
                 Here is a mission plan request along with examples of how this mission would be carried out. \
-                In your opinion, would you say that ALL of these examples are faithful to requested mission?\nMission request: \n'
+                In your opinion, would you say that ALL of these examples are faithful to requested mission? \
+                Don\'t concern yourself with low-level details (such as task parameters), just make sure action sequence is correct. \
+                Mission request: \n'
                 + mission_query
+                + "\nContext:\n"
+                + "".join([open(f).read() for f in self.context_files])
+                + "\nAtomic Proposition definitions:\n"
+                + macros
                 + "\nExample runs:\n"
                 + runs_str
             )
@@ -406,9 +421,13 @@ class MissionPlanner:
             else:
                 self.logger.warning(f"Arbiter disapproves. See example runs: {runs}")
                 e = self.verification_checker.ask_gpt(
-                    "Can you explain why you disagree?", True
+                    "Can you explain why you disagree?"
                 )
                 self.logger.debug(str(e))
+
+            self.verification_checker.reset_context(
+                self.verification_checker.initial_context_length
+            )
 
         self.aut.save("spot.aut", append=False)
 
@@ -488,7 +507,7 @@ def main(config: str):
         else:
             tpg = None
             logger.warning(
-                "No farm polygon found. Assuming we're not dealing with mobile robots..."
+                "No farm polygon found. Assuming we're not dealing with an orchard grid..."
             )
 
         # if user specifies config key -> optional keys

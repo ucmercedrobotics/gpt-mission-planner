@@ -19,12 +19,16 @@ proctype select_{}() {{
 
 
 class ElementTags(str, Enum):
-    MoveToGPSLocation = "MoveToGPSLocation"
-    DetectObject = "DetectObject"
     BoolCondition = "BoolCondition"
-    Sequence = "Sequence"
+    DetectObject = "DetectObject"
     Fallback = "Fallback"
+    MoveToGPSLocation = "MoveToGPSLocation"
     Parallel = "Parallel"
+    Sequence = "Sequence"
+    TakeAmbientTemperature = "TakeAmbientTemperature"
+    TakeCO2Reading = "TakeCO2Reading"
+    TakeThermalPicture = "TakeThermalPicture"
+    ValueCondition = "ValueCondition"
 
 
 class PromelaCompiler:
@@ -114,33 +118,30 @@ class PromelaCompiler:
                  /\
             leaf3  leaf4
         """
-        # run_proctype: str = "select ({} : {}..{});\n\n"
-        # if_statement: str = "if \n"
-        # conditional_statement: str = ":: {} {} {} -> \n"
-        # end_if: str = ":: else -> skip\n    fi\n\n"
-        # action_type: str = ""
-        first_condition: bool = True
+        else_statement: str = ":: else ->"
+        first_condition: bool = conditional
+        finished_condition: bool = False
 
         for t in sequence:
             if t.tag in ElementTags.__dict__.values():
                 if t.tag == ElementTags.Sequence:
                     # recurse
-                    self._define_tree(
-                        t, task_defs, execution_calls, indent, conditional
-                    )
+                    self._define_tree(t, task_defs, execution_calls, indent, False)
                 elif t.tag == ElementTags.Fallback:
+                    execution_calls.append(indent + "if\n")
+                    execution_calls.append(indent + ":: ")
                     self._define_tree(
                         t, task_defs, execution_calls, indent + "    ", True
                     )
-                    # self._evaluate_condition(t[0], task_defs, execution_calls, indent + "    ")
-                    execution_calls.append("    " + "fi\n")
+                    execution_calls.append(indent + "fi\n")
                 elif t.tag == ElementTags.Parallel:
                     pass  # TODO
                 else:
                     if t.get("name") is not None:
                         task_defs.append("Task " + t.get("name") + ";\n")
                         if conditional and not first_condition:
-                            execution_calls.append("    " + ":: else ->\n")
+                            execution_calls.append(indent[:-4] + else_statement + "\n")
+                            finished_condition = True
                         execution_calls.append(
                             indent
                             + t.get("name")
@@ -151,25 +152,55 @@ class PromelaCompiler:
                     # we assume its a Condition
                     else:
                         if t.tag == ElementTags.BoolCondition:
-                            val: str = t.get("value")
+                            result: str = t.get("value")
                             expected: str = t.get("expected")
-                            execution_calls.append(
-                                "    "
-                                + "select ({} : {}..{});\n\n".format(
-                                    val[1:-1], "0", "1"
-                                )
+                            # we know if has been added before
+                            execution_calls.insert(
+                                -2,
+                                (
+                                    indent[:-4]
+                                    + "select ({} : {}..{});\n\n".format(
+                                        result[1:-1], "0", "1"
+                                    )
+                                ),
                             )
-                            execution_calls.append("    " + "if\n")
-                            execution_calls.append("    " + ":: ")
-                            if val is not None and expected is not None:
+                            if result is not None and expected is not None:
                                 execution_calls.append(
-                                    f"{val[1:-1]} == {1 if expected else 0} ->\n"
+                                    f"{result[1:-1]} == {1 if expected else 0} ->\n"
+                                )
+                                self._add_global(result[1:-1])
+                            continue
+                        elif t.tag == ElementTags.ValueCondition:
+                            val: str = t.get("value")
+                            threshold: str = t.get("threshold")
+                            comp: str = t.get("comp")
+                            execution_calls.insert(
+                                -2,
+                                (
+                                    indent[:-4]
+                                    + "select ({} : {}..{});\n\n".format(
+                                        val[1:-1],
+                                        str(int(threshold) - 1),
+                                        str(int(threshold) + 1),
+                                    )
+                                ),
+                            )
+                            if (
+                                val is not None
+                                and threshold is not None
+                                and comp is not None
+                            ):
+                                execution_calls.append(
+                                    f"{val[1:-1]} {self.xml_comp_to_promela[comp]} {threshold} ->\n"
                                 )
                                 self._add_global(val[1:-1])
                             continue
                 first_condition = False
             else:
                 self.logger.error(f"Found unknown element tag: {t.tag}")
+
+        if conditional and not finished_condition:
+            execution_calls.append(indent[:-4] + else_statement + " skip\n")
 
     def _add_global(self, action_type: str) -> str:
         self.globals_used.append(action_type)

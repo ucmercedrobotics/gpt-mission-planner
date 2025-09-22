@@ -1,16 +1,17 @@
 <root BTCPP_format="4" schema_location="schemas/schemas/ros2_bt.xsd">
-    <Mission>if you find a pistachio at the first tree, move to the next one. if not go to the end</Mission>
-    <BehaviorTree ID="MainMission">
+    <Mission>if you find a pistachio at the first tree, move to the next one. then, go to the end</Mission>
+    <BehaviorTree ID="PistachioSearchMission">
         <Sequence>
-            <MoveToGPSLocation name="Move_to_first_tree" action_name="follow_gps_waypoints" latitude="37.26643908" longitude="-120.42079453"/>
-            <DetectObject name="Detect_pistachio_at_tree_1" action_name="detect_object" object="pistachio" detected="{pistachio_found}"/>
+            <MoveToGPSLocation name="Navigate_to_first_tree" action_name="follow_gps_waypoints" latitude="37.26643908" longitude="-120.42079453"/>
+            <DetectObject name="Search_for_pistachio_at_tree_1" action_name="detect_object" object="pistachio" detected="{pistachio_found}"/>
             <Fallback>
                 <Sequence>
                     <BoolCondition value="{pistachio_found}" expected="true"/>
-                    <MoveToGPSLocation name="Move_to_second_tree" action_name="follow_gps_waypoints" latitude="37.26644032166231" longitude="-120.42069862285281"/>
+                    <MoveToGPSLocation name="Navigate_to_second_tree" action_name="follow_gps_waypoints" latitude="37.26644032166231" longitude="-120.42069862285281"/>
                 </Sequence>
-                <MoveToGPSLocation name="Move_to_last_tree" action_name="follow_gps_waypoints" latitude="37.2657886" longitude="-120.42011635000001"/>
+                <AlwaysSuccess/>
             </Fallback>
+            <MoveToGPSLocation name="Navigate_to_final_tree" action_name="follow_gps_waypoints" latitude="37.2657886" longitude="-120.42011635000001"/>
         </Sequence>
     </BehaviorTree>
 </root>

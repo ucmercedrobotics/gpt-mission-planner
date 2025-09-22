@@ -20,7 +20,6 @@ from utils.xml_utils import (
 )
 from utils.spot_utils import add_init_state, init_state_macro, rename_ltl_macros
 from utils.gps_utils import TreePlacementGenerator
-from promela_compiler import PromelaCompiler
 
 LTL_KEY: str = "ltl"
 PROMELA_TEMPLATE_KEY: str = "promela_template"
@@ -84,6 +83,8 @@ class MissionPlanner:
         # init Promela compiler
         self.ltl: bool = ltl
         if self.ltl:
+            from promela_compiler import PromelaCompiler
+
             self.aut: Any = None
             self.human_review: bool = HUMAN_REVIEW
             # init XML mission gpt interface
@@ -139,14 +140,15 @@ class MissionPlanner:
             # first ask of XML and LTL
             if not self.xml_valid:
                 try:
-                    ret, xml_out, xml_task_count = self._generate_xml(xml_input, True)
+                    ret, xml_out, xml_task_count = self._generate_xml(xml_input, False)
                 except Exception as e:
-                    self.logger.debug(str(e))
+                    self.logger.debug(f"Error generating XML: {e}")
                     ret = False
                     xml_input = str(e)
                     self.retry += 1
                     continue
                 if not ret:
+                    self.logger.debug(f"XML generation failed: {xml_out}")
                     xml_input = xml_out
                     continue
                 # store file for logs
@@ -265,7 +267,9 @@ class MissionPlanner:
             xml = e
             self.logger.warning(f"Failure to lint XML: {e}")
         else:
+            self.logger.debug(f"Successfully linted XML...")
             if count:
+                self.logger.debug(f"Counting XML tasks...")
                 task_count = count_xml_tasks(xml)
 
         return ret, xml, task_count

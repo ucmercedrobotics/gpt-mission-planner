@@ -3,21 +3,13 @@ from typing import Tuple
 from lxml import etree
 
 
-SCHEMA_LOCATION_TAG: str = "schemaLocation"
-SCHEMA_LOCATION_INDEX: int = 1
-XSI: str = "xsi"
-# TODO: extract this from XSD.
-NS: dict = {
-    "xs": "http://www.w3.org/2001/XMLSchema",
-    "task": "https://robotics.ucmerced.edu/task",
-}
+SCHEMA_LOCATION_TAG: str = "schema_location"
 
 
 def parse_schema_location(xml_mp: str) -> str:
     root: etree._Element = etree.fromstring(xml_mp)
-    xsi = root.nsmap[XSI]
-    location = root.attrib["{" + xsi + "}" + SCHEMA_LOCATION_TAG]
-    return location.split(root.nsmap[None] + " ")[SCHEMA_LOCATION_INDEX]
+    location = root.attrib[SCHEMA_LOCATION_TAG]
+    return location
 
 
 def parse_code(mp_out: str | None, code_type: str = "xml") -> str:
@@ -55,26 +47,7 @@ def count_xml_tasks(xml_mp: str):
     task_count: int = 0
 
     # we're parsing before validation, so be careful
-    action_sequence: etree._Element = root.find("task:ActionSequence", NS)
-
-    if action_sequence is not None:
-        seq = action_sequence.find("task:Sequence", NS)
-        if seq is not None:
-            task_count = len(seq.xpath(".//task:TaskID", namespaces=NS))
-            conditional_counts = len(
-                seq.xpath(".//task:ConditionalActions", namespaces=NS)
-            )
-            # one for each conditional pair
-            consec_cond_tags = (
-                count_consecutive_tags(
-                    seq, "{" + NS["task"] + "}" + "ConditionalActions"
-                )
-                * 2
-            )
-            task_count += consec_cond_tags
-            # for those cases where these is no alternative defined, we have to add an edge and assume it terminates
-            # this is for counting against automata transition edges
-            task_count += (conditional_counts - consec_cond_tags) * 2
+    bt: etree._Element = root.find("BehaviorTree")
 
     return task_count
 

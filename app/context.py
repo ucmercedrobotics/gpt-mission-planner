@@ -106,6 +106,31 @@ def icra_2026_context(schema: str) -> list:
     return context
 
 
+def rap_2026_context(schema: str) -> list:
+    # default context
+    context: list = [
+        {
+            "role": "system",
+            "content": 'You are a mission planner that generates navigational XML mission plans based on robotic task representation. \
+                        When asked to generate a mission, create an XML file conformant to the known schema. \
+                        Place the original question in the Mission element under root for logging. \
+                        Please format your answers using XML markdown as such: ```xml answer ```. \
+                        Answer only with XML. \
+                        Do NOT include a declaration line. \
+                        Do NOT include comments. \
+                        Here is the schema that represent that available robot you have to accomplish your mission. \
+                        When generating task names in the XML mission, they MUST be descriptive as someone will be reading them. \
+                        It is critical that the XML validates against the schema and that the schema location attribute is included in the root tag. \
+                        Please include the XSI schema location every time you generate a mission with it\'s namespace in the attribute. \
+                        For example, `schemaLocation="<path_to_schema>.xsd">` \
+                        The mission must be syntactically correct and validate using an XML linter:'
+            + schema,
+        },
+    ]
+
+    return context
+
+
 def verification_agent_context(schema: str, promela_template: str) -> list:
     context: list = [
         {

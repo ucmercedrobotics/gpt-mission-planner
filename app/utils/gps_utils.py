@@ -13,8 +13,6 @@ from pyproj import Transformer
 from shapely.geometry import Polygon, LineString
 from lxml import etree
 
-from .xml_utils import NS
-
 
 class CoordinateSystem:
     """Handles coordinate transformations between different EPSG systems."""
@@ -137,7 +135,7 @@ class TreePlacementGenerator:
         return self.tree_points
 
     def replace_tree_ids_with_gps(self, xml_file: str) -> str:
-        """Replace tree IDs in the XML file with their GPS coordinates.
+        """Replace the id attribute of MoveToTreeID elements with their GPS coordinates.
 
         Args:
             xml_file (str): Path to the XML file to modify.
@@ -145,37 +143,22 @@ class TreePlacementGenerator:
         Returns:
             str: Path to the modified XML file.
         """
-        # Load the XML string
         root = etree.parse(xml_file).getroot()
 
-        # Find all tree elements and replace their IDs with GPS coordinates
-        for tree_elem in root.xpath(".//task:moveToGPSLocation", namespaces=NS):
-            id_elem = tree_elem.find(".//task:id", namespaces=NS)
-            # we assume the LLM filled in the GPS, possibly on edge of polygon.
-            if id_elem is None:
+        for tree_elem in root.findall(".//MoveToTreeID"):
+            id = tree_elem.get("id")
+            if id is None:
                 continue
-            id = id_elem.text
             gps_coords = self.tree_points[int(id) - 1]
             if gps_coords:
-                # Store the original tail whitespace before removing
-                tail_whitespace = id_elem.tail
-                # Remove the id element first
-                tree_elem.remove(id_elem)
-                # Create latitude element with proper indentation
-                lat_elem = etree.SubElement(
-                    tree_elem, etree.QName(NS["task"], "latitude")
-                )
-                lat_elem.text = str(gps_coords["lat"])
-                lat_elem.tail = tail_whitespace  # Preserve indentation
-                # Create longitude element with proper indentation
-                lon_elem = etree.SubElement(
-                    tree_elem, etree.QName(NS["task"], "longitude")
-                )
-                lon_elem.text = str(gps_coords["lon"])
-                lon_elem.tail = tail_whitespace  # Preserve indentation
+                # Set the latitude and longitude attributes to the GPS values
+                tree_elem.set("latitude", f"{gps_coords['lat']}")
+                tree_elem.set("longitude", f"{gps_coords['lon']}")
+                # Remove the id attribute
+                tree_elem.attrib.pop("id", None)
+                # Change the tag name to MoveToGPSLocation (no namespace)
+                tree_elem.tag = "MoveToGPSLocation"
 
-        # Write the modified XML back to the original file
-        # Ensure proper formatting by re-parsing and indenting
         etree.indent(root, space="    ")  # 4 spaces indentation
         with open(xml_file, "w", encoding="utf-8") as f:
             f.write(etree.tostring(root, pretty_print=True, encoding="unicode"))

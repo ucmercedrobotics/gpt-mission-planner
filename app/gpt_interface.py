@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import litellm
 from litellm import completion
 
-from context import icra_2026_context, verification_agent_context
+from context import rap_2026_context, verification_agent_context
 
 OPENAI_TEMP: float = 1.0
 
@@ -46,7 +46,7 @@ class LLMInterface:
             self._set_schema(s)
 
         # context can be updated from context.py
-        self.context = icra_2026_context(self.schemas)
+        self.context = rap_2026_context(self.schemas)
 
         # this could be empty
         if context_files is not None:

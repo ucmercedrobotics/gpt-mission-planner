@@ -24,12 +24,11 @@ from utils.gps_utils import TreePlacementGenerator
 LTL_KEY: str = "ltl"
 PROMELA_TEMPLATE_KEY: str = "promela_template"
 SPIN_PATH_KEY: str = "spin_path"
-OPENAI: str = "openai/gpt-5"
-# OPENAI: str = "openai/gpt-5-mini"
-# ANTHROPIC: str = "claude-opus-4-1-20250805"
-ANTHROPIC: str = "claude-sonnet-4-20250514"
+# OPENAI: str = "openai/gpt-5"
+OPENAI: str = "openai/o3"
+ANTHROPIC: str = "claude-opus-4-1-20250805"
+# ANTHROPIC: str = "claude-sonnet-4-20250514"
 GEMINI: str = "gemini/gemini-2.5-pro"
-# TODO: remove this
 HUMAN_REVIEW: bool = False
 EXAMPLE_RUNS: int = 5
 
@@ -140,7 +139,7 @@ class MissionPlanner:
             # first ask of XML and LTL
             if not self.xml_valid:
                 try:
-                    ret, xml_out, xml_task_count = self._generate_xml(xml_input, False)
+                    ret, xml_out, xml_task_count = self._generate_xml(xml_input, True)
                 except Exception as e:
                     self.logger.debug(f"Error generating XML: {e}")
                     ret = False
@@ -244,14 +243,12 @@ class MissionPlanner:
                 )
             else:
                 self.logger.error("Unable to formally verify from your prompt...")
-                # TODO: do we break here?
 
         # clear before new query
         self.gpt.reset_context(self.gpt.initial_context_length)
         if self.ltl:
             self.pml_gpt.reset_context(self.pml_gpt.initial_context_length)
 
-        # TODO: decide how the reuse flow works
         self.nic.close_socket()
 
     def _generate_xml(self, prompt: str, count: bool = False) -> Tuple[bool, str, int]:
@@ -355,7 +352,6 @@ class MissionPlanner:
         # write pml system and LTL to file
         self.promela_path = write_out_file(self.log_directory, new_promela_string)
         # execute spin verification
-        # TODO: this output isn't as useful as trail file, maybe can use later if needed.
         cli_ret, e = execute_shell_cmd(
             [self.spin_path, "-search", "-a", "-O2", self.promela_path]
         )

@@ -88,7 +88,6 @@ class LLMInterface:
     def reset_context(self, context_count: int):
         self.context = self.context[0:context_count]
 
-    # TODO: should we expose OpenAI object or string response?
     def ask_gpt(self, prompt: str, add_context: bool = False) -> str | None:
         answered: bool = False
         message: list = self.context.copy()

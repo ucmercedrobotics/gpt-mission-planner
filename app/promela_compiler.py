@@ -1,10 +1,9 @@
 import logging
 import sys
-from enum import Enum
-from typing import Tuple
 
 from lxml import etree
 
+from xml_types import ControlTags, ActionTags, ConditionalTags
 
 SENSOR_FN: str = """
 proctype select_{}() {{
@@ -16,19 +15,6 @@ proctype select_{}() {{
     }}
 }}
 """
-
-
-class ElementTags(str, Enum):
-    BoolCondition = "BoolCondition"
-    DetectObject = "DetectObject"
-    Fallback = "Fallback"
-    MoveToGPSLocation = "MoveToGPSLocation"
-    Parallel = "Parallel"
-    Sequence = "Sequence"
-    TakeAmbientTemperature = "TakeAmbientTemperature"
-    TakeCO2Reading = "TakeCO2Reading"
-    TakeThermalPicture = "TakeThermalPicture"
-    ValueCondition = "ValueCondition"
 
 
 class PromelaCompiler:
@@ -48,12 +34,6 @@ class PromelaCompiler:
             "gte": ">=",
             "eq": "==",
             "neq": "!=",
-        }
-        self.actions_to_pml_global: dict = {
-            "takeThermalPicture": "thermalSample",
-            "takeAmbientTemperature": "temperatureSample",
-            "takeCO2Reading": "co2Sample",
-            "detectObject": "detectionStatus",
         }
 
     def init_xml_tree(self, xml_file: str) -> None:
@@ -108,99 +88,75 @@ class PromelaCompiler:
         task_defs: list[str],
         execution_calls: list[str],
         indent: str = "    ",
-        conditional: bool = False,
+        fallback: bool = False,
     ):
-        """
-        Defines behavior tree recursively using Leaf classes defined above.
-            root -> next1 -> next2
-             /\                /
-        leaf1  leaf2        leaf5
-                 /\
-            leaf3  leaf4
-        """
         else_statement: str = ":: else ->"
-        first_condition: bool = conditional
-        finished_condition: bool = False
+        sequence_count: int = len(sequence.findall("Sequence"))
 
         for t in sequence:
-            if t.tag in ElementTags.__dict__.values():
-                if t.tag == ElementTags.Sequence:
-                    # recurse
-                    self._define_tree(t, task_defs, execution_calls, indent, False)
-                elif t.tag == ElementTags.Fallback:
-                    execution_calls.append(indent + "if\n")
-                    execution_calls.append(indent + ":: ")
-                    self._define_tree(
-                        t, task_defs, execution_calls, indent + "    ", True
-                    )
-                    execution_calls.append(indent + "fi\n")
-                elif t.tag == ElementTags.Parallel:
-                    pass  # TODO
-                else:
-                    if t.get("name") is not None:
-                        task_defs.append("Task " + t.get("name") + ";\n")
-                        if conditional and not first_condition:
-                            execution_calls.append(indent[:-4] + else_statement + "\n")
-                            finished_condition = True
-                        execution_calls.append(
-                            indent
-                            + t.get("name")
-                            + ".action.actionType = "
-                            + t.tag
-                            + ";\n"
-                        )
-                    # we assume its a Condition
+            if t.tag == ControlTags.Sequence:
+                # recurse
+                self._define_tree(t, task_defs, execution_calls, indent)
+                sequence_count -= 1
+                if fallback:
+                    if sequence_count > 0:
+                        execution_calls.append(indent[:-4] + else_statement + "\n")
                     else:
-                        if t.tag == ElementTags.BoolCondition:
-                            result: str = t.get("value")
-                            expected: str = t.get("expected")
-                            # we know if has been added before
-                            execution_calls.insert(
-                                -2,
-                                (
-                                    indent[:-4]
-                                    + "select ({} : {}..{});\n\n".format(
-                                        result[1:-1], "0", "1"
-                                    )
-                                ),
-                            )
-                            if result is not None and expected is not None:
-                                execution_calls.append(
-                                    f"{result[1:-1]} == {1 if expected else 0} ->\n"
+                        execution_calls.append(indent[:-4] + else_statement + " skip\n")
+                    fallback = False
+            elif t.tag == ControlTags.Fallback:
+                execution_calls.append(indent + "if\n")
+                execution_calls.append(indent + ":: ")
+                self._define_tree(t, task_defs, execution_calls, indent + "    ", True)
+                execution_calls.append(indent + "fi\n")
+            elif t.tag == ControlTags.Parallel:
+                pass  # TODO
+            elif t.tag in ActionTags.__dict__.values():
+                if t.get("name") is not None:
+                    task_defs.append("Task " + t.get("name") + ";\n")
+                    execution_calls.append(
+                        indent + t.get("name") + ".action.actionType = " + t.tag + ";\n"
+                    )
+                # we assume its a Condition
+            elif t.tag in ConditionalTags.__dict__.values():
+                if t.tag == ConditionalTags.AssertTrue:
+                    result: str = t.get("result")
+                    if result is not None:
+                        execution_calls.insert(
+                            -2,
+                            (
+                                indent[:-4]
+                                + "select ({} : {}..{});\n\n".format(
+                                    result[1:-1], "0", "1"
                                 )
-                                self._add_global(result[1:-1])
-                            continue
-                        elif t.tag == ElementTags.ValueCondition:
-                            val: str = t.get("value")
-                            threshold: str = t.get("threshold")
-                            comp: str = t.get("comp")
-                            execution_calls.insert(
-                                -2,
-                                (
-                                    indent[:-4]
-                                    + "select ({} : {}..{});\n\n".format(
-                                        val[1:-1],
-                                        str(int(threshold) - 1),
-                                        str(int(threshold) + 1),
-                                    )
-                                ),
+                            ),
+                        )
+                        execution_calls.append(f"{result[1:-1]} == 1 ->\n")
+                        self._add_global(result[1:-1])
+                    continue
+                elif t.tag == ConditionalTags.CheckValue:
+                    val: str = t.get("value")
+                    threshold: str = t.get("threshold")
+                    comp: str = t.get("comp")
+                    execution_calls.insert(
+                        -2,
+                        (
+                            indent[:-4]
+                            + "select ({} : {}..{});\n\n".format(
+                                val[1:-1],
+                                str(int(threshold) - 1),
+                                str(int(threshold) + 1),
                             )
-                            if (
-                                val is not None
-                                and threshold is not None
-                                and comp is not None
-                            ):
-                                execution_calls.append(
-                                    f"{val[1:-1]} {self.xml_comp_to_promela[comp]} {threshold} ->\n"
-                                )
-                                self._add_global(val[1:-1])
-                            continue
-                first_condition = False
+                        ),
+                    )
+                    if val is not None and threshold is not None and comp is not None:
+                        execution_calls.append(
+                            f"{val[1:-1]} {self.xml_comp_to_promela[comp]} {threshold} ->\n"
+                        )
+                        self._add_global(val[1:-1])
+                    continue
             else:
-                self.logger.error(f"Found unknown element tag: {t.tag}")
-
-        if conditional and not finished_condition:
-            execution_calls.append(indent[:-4] + else_statement + " skip\n")
+                self.logger.warning(f"Unknown tag in XML: {t.tag}")
 
     def _add_global(self, action_type: str) -> str:
         self.globals_used.append(action_type)

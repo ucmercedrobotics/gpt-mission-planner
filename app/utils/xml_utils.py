@@ -2,13 +2,12 @@ from typing import Tuple
 
 from lxml import etree
 
-
-SCHEMA_LOCATION_TAG: str = "schema_location"
+from app.xml_types import AttributeTags, ControlTags, ActionTags
 
 
 def parse_schema_location(xml_mp: str) -> str:
     root: etree._Element = etree.fromstring(xml_mp)
-    location = root.attrib[SCHEMA_LOCATION_TAG]
+    location = root.attrib[AttributeTags.SchemaLocation]
     return location
 
 
@@ -47,28 +46,18 @@ def count_xml_tasks(xml_mp: str):
     task_count: int = 0
 
     # we're parsing before validation, so be careful
-    bt: etree._Element = root.find("BehaviorTree")
+    bt: etree._Element = root.find(ControlTags.BehaviorTree)
 
-    # TODO:
+    fallback: etree._Element = (
+        bt.findall(".//" + ControlTags.Fallback) if bt is not None else None
+    )
+
+    # count Conditionals only under Fallbacks
+    for fb in fallback:
+        task_count += len(fb.findall(ControlTags.Sequence))
+
+    # count Actions
+    for a in ActionTags:
+        task_count += len(root.findall(".//" + a))
 
     return task_count
-
-
-def count_consecutive_tags(parent, tag_name):
-    count = 0
-    prev_was_target = False
-
-    for elem in parent:
-        if elem.tag == tag_name:
-            if prev_was_target:
-                count += 1  # Count only the first occurrence of a sequence
-                prev_was_target = False  # Reset so we count each cluster once
-            else:
-                prev_was_target = True
-        else:
-            prev_was_target = False  # Reset when a different tag is encountered
-
-        # Recursively check nested elements
-        count += count_consecutive_tags(elem, tag_name)
-
-    return count

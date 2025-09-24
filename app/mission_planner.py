@@ -24,10 +24,10 @@ from utils.gps_utils import TreePlacementGenerator
 LTL_KEY: str = "ltl"
 PROMELA_TEMPLATE_KEY: str = "promela_template"
 SPIN_PATH_KEY: str = "spin_path"
-# OPENAI: str = "openai/gpt-5"
-OPENAI: str = "openai/o3"
-ANTHROPIC: str = "claude-opus-4-1-20250805"
-# ANTHROPIC: str = "claude-sonnet-4-20250514"
+OPENAI: str = "openai/gpt-5"
+# OPENAI: str = "openai/o3"
+# ANTHROPIC: str = "claude-opus-4-1-20250805"
+ANTHROPIC: str = "claude-sonnet-4-20250514"
 GEMINI: str = "gemini/gemini-2.5-pro"
 HUMAN_REVIEW: bool = False
 EXAMPLE_RUNS: int = 5

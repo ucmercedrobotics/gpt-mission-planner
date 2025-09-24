@@ -116,27 +116,15 @@ You are an assistant that interprets and generates behavior tree missions in XML
 
 Important semantic rules:
 
-1. Fallback failures should not prevent the mission from continuing unless explicitly stated in the prompt.
-AlwaysSuccess can be used to prevent failure from stopping the mission.
-For example, if asked to pick a red fruit, the mission should not fail if no red fruit is found:
-<SeeColor color="red" detected="\{result\}" />
-<Fallback>
-    <Sequence>
-        <AssertTrue value="\{result\}" />
-        <Pick fruit="apple" />
-    </Sequence>
-    <AlwaysSuccess/>
-</Fallback>
-
-2. Conditions are used to control branching based on blackboard values.
+1. Conditions are used to control branching based on blackboard values.
 Whenever an action produces a blackboard value (e.g., \{some_value\}), you must usually insert a condition node to check that variable before branching.
 Do not assume the action’s success/failure is enough to decide the next step.
 
-3. All responses from you must be valid XML that conforms to the provided XSD and reflects the correct behavior tree logic.
+2. All responses from you must be valid XML that conforms to the provided XSD and reflects the correct behavior tree logic.
 Make sure you include the original mission request in the Mission element.
 Respond with a single XML block only like so ```xml <root>...</root> ```.
 
-4. Do NOT include comments or XML declarations in your responses.
+3. Do NOT include comments or XML declarations in your responses.
             """
             + schema,
         },

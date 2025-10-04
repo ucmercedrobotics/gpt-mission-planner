@@ -25,129 +25,184 @@ def parse_xml_mission(xml_file_path):
     tree = ET.parse(xml_file_path)
     root = tree.getroot()
 
-    # Define namespace
-    namespace = {"task": "https://robotics.ucmerced.edu/task"}
+    # Try to parse new BehaviorTree format first
+    mission_elem = root.find("Mission")
+    behavior_tree = root.find("BehaviorTree")
 
-    # Extract mission information
-    task_info = root.find("task:CompositeTaskInformation", namespace)
-    task_id = (
-        task_info.find("task:TaskID", namespace).text
-        if task_info
-        else "Unknown Mission"
-    )
-    task_description = (
-        task_info.find("task:TaskDescription", namespace).text
-        if task_info
-        else "No description"
-    )
+    if mission_elem is not None and behavior_tree is not None:
+        # New BehaviorTree format
+        mission_description = (
+            mission_elem.text if mission_elem.text else "No description"
+        )
+        mission_id = behavior_tree.get("ID", "Unknown Mission")
 
-    # Extract waypoints from atomic tasks
-    waypoints = []
-    atomic_tasks = root.find("task:AtomicTasks", namespace)
+        waypoints = []
+        sequence_order = []
 
-    if atomic_tasks:
-        for atomic_task in atomic_tasks.findall("task:AtomicTask", namespace):
-            task_id_elem = atomic_task.find("task:TaskID", namespace)
-            task_desc_elem = atomic_task.find("task:TaskDescription", namespace)
-            action = atomic_task.find("task:Action", namespace)
+        # Find all MoveToGPSLocation elements
+        move_elements = root.findall(".//MoveToGPSLocation")
 
-            if action:
-                action_type = action.find("task:ActionType", namespace)
-                if action_type is not None and action_type.text == "moveToGPSLocation":
-                    gps_location = action.find("task:moveToGPSLocation", namespace)
-                    if gps_location:
-                        lat_elem = gps_location.find("task:latitude", namespace)
-                        lon_elem = gps_location.find("task:longitude", namespace)
+        for i, move_elem in enumerate(move_elements):
+            name = move_elem.get("name", f"waypoint_{i+1}")
+            latitude = move_elem.get("latitude")
+            longitude = move_elem.get("longitude")
 
-                        if lat_elem is not None and lon_elem is not None:
-                            waypoint = {
-                                "task_id": (
-                                    task_id_elem.text
-                                    if task_id_elem is not None
-                                    else "Unknown"
-                                ),
-                                "description": (
-                                    task_desc_elem.text
-                                    if task_desc_elem is not None
-                                    else "No description"
-                                ),
-                                "latitude": float(lat_elem.text),
-                                "longitude": float(lon_elem.text),
+            if latitude and longitude:
+                waypoint = {
+                    "task_id": name,
+                    "description": f"Move to GPS location: {name}",
+                    "latitude": float(latitude),
+                    "longitude": float(longitude),
+                }
+                waypoints.append(waypoint)
+                sequence_order.append(name)
+
+        return {
+            "mission_id": mission_id,
+            "mission_description": mission_description,
+            "waypoints": waypoints,
+            "sequence_order": sequence_order,
+            "conditional_tasks": {},
+            "conditional_conditions": {},
+        }
+
+    else:
+        # Try to parse old format with namespaces
+        namespace = {"task": "https://robotics.ucmerced.edu/task"}
+
+        # Extract mission information
+        task_info = root.find("task:CompositeTaskInformation", namespace)
+        task_id = (
+            task_info.find("task:TaskID", namespace).text
+            if task_info
+            else "Unknown Mission"
+        )
+        task_description = (
+            task_info.find("task:TaskDescription", namespace).text
+            if task_info
+            else "No description"
+        )
+
+        # Extract waypoints from atomic tasks
+        waypoints = []
+        atomic_tasks = root.find("task:AtomicTasks", namespace)
+
+        if atomic_tasks:
+            for atomic_task in atomic_tasks.findall("task:AtomicTask", namespace):
+                task_id_elem = atomic_task.find("task:TaskID", namespace)
+                task_desc_elem = atomic_task.find("task:TaskDescription", namespace)
+                action = atomic_task.find("task:Action", namespace)
+
+                if action:
+                    action_type = action.find("task:ActionType", namespace)
+                    if (
+                        action_type is not None
+                        and action_type.text == "moveToGPSLocation"
+                    ):
+                        gps_location = action.find("task:moveToGPSLocation", namespace)
+                        if gps_location:
+                            lat_elem = gps_location.find("task:latitude", namespace)
+                            lon_elem = gps_location.find("task:longitude", namespace)
+
+                            if lat_elem is not None and lon_elem is not None:
+                                waypoint = {
+                                    "task_id": (
+                                        task_id_elem.text
+                                        if task_id_elem is not None
+                                        else "Unknown"
+                                    ),
+                                    "description": (
+                                        task_desc_elem.text
+                                        if task_desc_elem is not None
+                                        else "No description"
+                                    ),
+                                    "latitude": float(lat_elem.text),
+                                    "longitude": float(lon_elem.text),
+                                }
+                                waypoints.append(waypoint)
+
+        # Extract action sequence for path ordering and conditional logic
+        sequence_order = []
+        conditional_tasks = {}  # Maps conditional group ID to list of task IDs
+        conditional_conditions = (
+            {}
+        )  # Maps conditional group ID to condition description
+        conditional_counter = 0
+
+        def parse_sequence_element(element, parent_conditional_id=None):
+            nonlocal conditional_counter
+
+            for child in element:
+                if child.tag.endswith("TaskID"):
+                    task_id = child.text
+                    sequence_order.append(task_id)
+                    if parent_conditional_id is not None:
+                        if parent_conditional_id not in conditional_tasks:
+                            conditional_tasks[parent_conditional_id] = []
+                        conditional_tasks[parent_conditional_id].append(task_id)
+
+                elif child.tag.endswith("ConditionalActions"):
+                    # Extract condition information
+                    conditional_counter += 1
+                    current_conditional_id = f"conditional_{conditional_counter}"
+
+                    # Parse the condition
+                    conditional_elem = child.find("task:Conditional", namespace)
+                    condition_desc = "Unknown condition"
+                    if conditional_elem is not None:
+                        comparator_elem = conditional_elem.find(
+                            "task:Comparator", namespace
+                        )
+                        hard_value_elem = conditional_elem.find(
+                            "task:HardValue", namespace
+                        )
+
+                        if comparator_elem is not None and hard_value_elem is not None:
+                            comparator = comparator_elem.text
+                            value = hard_value_elem.text
+
+                            # Convert comparator to readable format
+                            comparator_map = {
+                                "lt": "less than",
+                                "gt": "greater than",
+                                "eq": "equal to",
+                                "le": "less than or equal to",
+                                "ge": "greater than or equal to",
+                                "ne": "not equal to",
                             }
-                            waypoints.append(waypoint)
+                            readable_comparator = comparator_map.get(
+                                comparator, comparator
+                            )
+                            condition_desc = (
+                                f"if value is {readable_comparator} {value}"
+                            )
 
-    # Extract action sequence for path ordering and conditional logic
-    sequence_order = []
-    conditional_tasks = {}  # Maps conditional group ID to list of task IDs
-    conditional_conditions = {}  # Maps conditional group ID to condition description
-    conditional_counter = 0
+                    conditional_conditions[current_conditional_id] = condition_desc
 
-    def parse_sequence_element(element, parent_conditional_id=None):
-        nonlocal conditional_counter
+                    # Parse the conditional sequence
+                    conditional_sequence = child.find("task:Sequence", namespace)
+                    if conditional_sequence is not None:
+                        parse_sequence_element(
+                            conditional_sequence, current_conditional_id
+                        )
 
-        for child in element:
-            if child.tag.endswith("TaskID"):
-                task_id = child.text
-                sequence_order.append(task_id)
-                if parent_conditional_id is not None:
-                    if parent_conditional_id not in conditional_tasks:
-                        conditional_tasks[parent_conditional_id] = []
-                    conditional_tasks[parent_conditional_id].append(task_id)
+                elif child.tag.endswith("Sequence"):
+                    parse_sequence_element(child, parent_conditional_id)
 
-            elif child.tag.endswith("ConditionalActions"):
-                # Extract condition information
-                conditional_counter += 1
-                current_conditional_id = f"conditional_{conditional_counter}"
+        action_sequence = root.find("task:ActionSequence", namespace)
+        if action_sequence:
+            sequence = action_sequence.find("task:Sequence", namespace)
+            if sequence:
+                parse_sequence_element(sequence)
 
-                # Parse the condition
-                conditional_elem = child.find("task:Conditional", namespace)
-                condition_desc = "Unknown condition"
-                if conditional_elem is not None:
-                    comparator_elem = conditional_elem.find(
-                        "task:Comparator", namespace
-                    )
-                    hard_value_elem = conditional_elem.find("task:HardValue", namespace)
-
-                    if comparator_elem is not None and hard_value_elem is not None:
-                        comparator = comparator_elem.text
-                        value = hard_value_elem.text
-
-                        # Convert comparator to readable format
-                        comparator_map = {
-                            "lt": "less than",
-                            "gt": "greater than",
-                            "eq": "equal to",
-                            "le": "less than or equal to",
-                            "ge": "greater than or equal to",
-                            "ne": "not equal to",
-                        }
-                        readable_comparator = comparator_map.get(comparator, comparator)
-                        condition_desc = f"if value is {readable_comparator} {value}"
-
-                conditional_conditions[current_conditional_id] = condition_desc
-
-                # Parse the conditional sequence
-                conditional_sequence = child.find("task:Sequence", namespace)
-                if conditional_sequence is not None:
-                    parse_sequence_element(conditional_sequence, current_conditional_id)
-
-            elif child.tag.endswith("Sequence"):
-                parse_sequence_element(child, parent_conditional_id)
-
-    action_sequence = root.find("task:ActionSequence", namespace)
-    if action_sequence:
-        sequence = action_sequence.find("task:Sequence", namespace)
-        if sequence:
-            parse_sequence_element(sequence)
-
-    return {
-        "mission_id": task_id,
-        "mission_description": task_description,
-        "waypoints": waypoints,
-        "sequence_order": sequence_order,
-        "conditional_tasks": conditional_tasks,
-        "conditional_conditions": conditional_conditions,
-    }
+        return {
+            "mission_id": task_id,
+            "mission_description": task_description,
+            "waypoints": waypoints,
+            "sequence_order": sequence_order,
+            "conditional_tasks": conditional_tasks,
+            "conditional_conditions": conditional_conditions,
+        }
 
 
 def create_kml(mission_data, output_file):

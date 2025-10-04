@@ -11,15 +11,15 @@ Bottom Right (SE) (tree 144): 37.26578860, -120.42011635
 
 Grid size:
 
-Rows: 18 (indexed 1 to 18)
+8 trees per row
 
-Columns: 8 (indexed 1 to 8)
+18 trees per columns (aisle)
 
 Total trees: 18 × 8 = 144 trees
 
 RULES:
 
-Numbering: one-based indexing, ordered left-to-right, top-to-bottom (like reading a book) for all trees. i.e tree 1 is row 1, column 1.
+Numbering: ONE-BASED INDEXING NOT ZERO INDEX, ordered left-to-right, top-to-bottom (like reading a book) for all trees. i.e tree 1 is row 1, column 1.
 Tasks should almost always require driving to a tree and then doing an action unless doing multiple actions at the same tree.
 
-USE THIS INFORMATION TO SELECT TREES IN YOUR MISSION XML.
+USE THIS INFORMATION TO CREATE THE XML MISSION.

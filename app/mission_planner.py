@@ -76,7 +76,7 @@ class MissionPlanner:
         self.retry: int = -1
         # init gpt interface
         self.gpt: LLMInterface = LLMInterface(
-            self.logger, token_path, ANTHROPIC, max_tokens, temperature=temperature
+            self.logger, token_path, OPENAI, max_tokens, temperature=temperature
         )
         self.gpt.init_context(self.schema_paths, self.context_files)
         # init Promela compiler
@@ -88,7 +88,7 @@ class MissionPlanner:
             self.human_review: bool = HUMAN_REVIEW
             # init XML mission gpt interface
             self.pml_gpt: LLMInterface = LLMInterface(
-                self.logger, token_path, ANTHROPIC, max_tokens, temperature=temperature
+                self.logger, token_path, OPENAI, max_tokens, temperature=temperature
             )
             # Claude human verification substitute
             self.verification_checker: LLMInterface = LLMInterface(
@@ -139,7 +139,9 @@ class MissionPlanner:
             # first ask of XML and LTL
             if not self.xml_valid:
                 try:
-                    ret, xml_out, xml_task_count = self._generate_xml(xml_input, True)
+                    ret, xml_out, xml_task_count = self._generate_xml(
+                        xml_input, self.ltl
+                    )
                 except Exception as e:
                     self.logger.debug(f"Error generating XML: {e}")
                     ret = False

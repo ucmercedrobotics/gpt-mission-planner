@@ -8,6 +8,7 @@ from litellm import completion
 from context import rap_2026_context, verification_agent_context
 
 OPENAI_TEMP: float = 1.0
+REASONING: str = "low"
 
 
 class LLMInterface:
@@ -34,11 +35,13 @@ class LLMInterface:
         # input template file provided when wanting spin verification
         self.promela_template: str = ""
         self.temperature: float = temperature
+        self.reasoning: str | None = None
         if "openai" in self.model:
             self.logger.warning(
                 f"Using OpenAI model: {self.model}, which requires temperature {OPENAI_TEMP}"
             )
             self.temperature = OPENAI_TEMP
+            self.reasoning = REASONING
 
     def init_context(self, schema_path: list[str], context_files: list[str]):
         for s in schema_path:
@@ -96,7 +99,11 @@ class LLMInterface:
         while not answered:
             try:
                 cmp = completion(
-                    model=self.model, messages=message, temperature=self.temperature
+                    model=self.model,
+                    messages=message,
+                    temperature=self.temperature,
+                    reasoning_effort=self.reasoning,
+                    max_tokens=self.max_tokens,
                 )
                 answered = True
             except litellm.exceptions.RateLimitError as e:

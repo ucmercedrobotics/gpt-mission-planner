@@ -1,3 +1,4 @@
 [submodule "schemas"]
 	path = schemas
 	url = https://github.com/ucmercedrobotics/gpt-mission-planner-schemas.git
+	branch = main

@@ -122,7 +122,7 @@ Do not assume the action’s success/failure is enough to decide the next step.
 
 2. All responses from you must be valid XML that conforms to the provided XSD and reflects the correct behavior tree logic.
 Make sure you include the original mission request in the Mission element.
-Respond with a single XML block only like so ```xml <root>...</root> ```.
+Respond with a single XML markdown code block only like so ```xml <root>...</root> ```.
 
 3. Do NOT include comments or XML declarations in your responses.
             """

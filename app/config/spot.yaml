@@ -8,7 +8,7 @@ temperature: 0.2
 log_directory: "./app/gpt_outputs/"
 # schema per 1872.1-2024 + farm layout
 schema:
-  - "schemas/schemas/bd_spot.xsd"
+  - "schemas/bd_spot.xsd"
 context_files:
   # - "./app/resources/context/wheeled_bots/reza20.geojson"
   - "./app/resources/context/wheeled_bots/reza_medium_polygon.txt"

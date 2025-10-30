@@ -31,3 +31,7 @@ def write_out_file(dir: str, mp_out: str | None) -> str:
     os.chmod(temp_file_name, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
 
     return temp_file_name
+
+def read_file(path: str) -> str:
+    with open(path, 'r') as f:
+        return f.read()

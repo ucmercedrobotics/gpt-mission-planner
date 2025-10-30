@@ -1,0 +1,9 @@
+{% for schema in schemas %}
+{{ schema.content }}
+
+This schema is located at path: {{ schema.path }}
+
+{% if not loop.last %}
+Next schema:
+{% endif %}
+{% endfor %}

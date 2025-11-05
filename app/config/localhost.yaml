@@ -9,6 +9,9 @@ log_directory: "./app/gpt_outputs/rap"
 # schema per 1872.1-2024 + farm layout
 schema:
   - "schemas/amiga_btcpp.xsd"
+  # - "schemas/clearpath_husky.xsd"
+# NOTE: this is only for backwards compat when we change schema formats
+xml_lint: True
 context_files:
   # - "./app/resources/context/wheeled_bots/thompson.txt"
   - "./app/resources/context/wheeled_bots/reza_medium_polygon.txt"

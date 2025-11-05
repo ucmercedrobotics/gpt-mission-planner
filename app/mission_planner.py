@@ -25,12 +25,13 @@ LTL_KEY: str = "ltl"
 PROMELA_TEMPLATE_KEY: str = "promela_template"
 SPIN_PATH_KEY: str = "spin_path"
 OPENAI: str = "openai/gpt-5"
-# OPENAI: str = "openai/o3"
-# ANTHROPIC: str = "claude-opus-4-1-20250805"
 ANTHROPIC: str = "claude-sonnet-4-20250514"
 GEMINI: str = "gemini/gemini-2.5-pro"
 HUMAN_REVIEW: bool = False
 EXAMPLE_RUNS: int = 5
+# select model
+MODEL: str = OPENAI
+ARBITER: str = ANTHROPIC
 
 
 class MissionPlanner:
@@ -38,6 +39,7 @@ class MissionPlanner:
         self,
         token_path: str,
         schema_paths: list[str],
+        xml_lint: bool,
         context_files: list[str],
         tpg: TreePlacementGenerator,
         max_retries: int,
@@ -53,6 +55,7 @@ class MissionPlanner:
         self.logger: logging.Logger = logger
         # set schema and farm file paths
         self.schema_paths: list[str] = schema_paths
+        self.xml_lint: bool = xml_lint
         self.context_files: list[str] = context_files
         # tree placement generator init
         if tpg is not None:
@@ -76,7 +79,7 @@ class MissionPlanner:
         self.retry: int = -1
         # init gpt interface
         self.gpt: LLMInterface = LLMInterface(
-            self.logger, token_path, OPENAI, max_tokens, temperature=temperature
+            self.logger, token_path, MODEL, max_tokens, temperature=temperature
         )
         self.gpt.init_context(self.schema_paths, self.context_files)
         # init Promela compiler
@@ -88,11 +91,11 @@ class MissionPlanner:
             self.human_review: bool = HUMAN_REVIEW
             # init XML mission gpt interface
             self.pml_gpt: LLMInterface = LLMInterface(
-                self.logger, token_path, OPENAI, max_tokens, temperature=temperature
+                self.logger, token_path, MODEL, max_tokens, temperature=temperature
             )
             # Claude human verification substitute
             self.verification_checker: LLMInterface = LLMInterface(
-                self.logger, token_path, OPENAI, max_tokens, temperature=temperature
+                self.logger, token_path, ARBITER, max_tokens, temperature=temperature
             )
             # object for compiling Promela from XML
             self.promela: PromelaCompiler = PromelaCompiler(
@@ -255,12 +258,14 @@ class MissionPlanner:
 
     def _generate_xml(self, prompt: str, count: bool = False) -> Tuple[bool, str, int]:
         task_count: int = 0
+        ret: bool = True
         # generate XML mission
         xml_out: str | None = self.gpt.ask_gpt(prompt, True)
         self.logger.debug(xml_out)
         xml: str = parse_code(xml_out)
         # validate XML output
-        ret, e = self._lint_xml(xml)
+        if self.xml_lint:
+            ret, e = self._lint_xml(xml)
         # check if we have a valid XML
         if not ret:
             xml = e
@@ -525,6 +530,7 @@ def main(config: str):
         mp: MissionPlanner = MissionPlanner(
             config_yaml["token"],
             config_yaml["schema"],
+            config_yaml.get("xml_lint", True),
             context_files,
             tpg,
             config_yaml["max_retries"],

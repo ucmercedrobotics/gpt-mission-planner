@@ -8,7 +8,7 @@ from litellm import completion
 from context import rap_2026_context, verification_agent_context
 
 OPENAI_TEMP: float = 1.0
-REASONING: str = "minimal"
+REASONING: str = "low"
 
 
 class LLMInterface:

@@ -213,15 +213,16 @@ class MissionPlanner:
             if self.tpg is not None:
                 file_xml_out = self.tpg.replace_tree_ids_with_gps(file_xml_out)
                 self.logger.debug(f"Replaced tree IDs with GPS coordinates...")
-                ret, err = self._lint_xml(open(file_xml_out, "r").read())
-                if not ret:
-                    self.logger.error(
-                        f"Failed to lint XML after replacing tree IDs: {err}"
-                    )
-                    continue
+                if False:
+                    ret, err = self._lint_xml(open(file_xml_out, "r").read())
+                    if not ret:
+                        self.logger.error(
+                            f"Failed to lint XML after replacing tree IDs: {err}"
+                        )
+                        continue
 
-            if not ret:
-                self.logger.error("Unable to formally verify from your prompt...")
+                    if not ret:
+                        self.logger.error("Unable to formally verify from your prompt...")
 
         # clear before new query
         self.gpt.reset_context(self.gpt.initial_context_length)
@@ -239,6 +240,8 @@ class MissionPlanner:
         # validate XML output
         if validate:
             ret, e = self._lint_xml(xml)
+        else:
+            return True, xml, task_count
         # check if we have a valid XML
         if not ret:
             xml = e

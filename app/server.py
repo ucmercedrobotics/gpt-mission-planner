@@ -100,6 +100,7 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
             if "geojsonName" in data:
                 match data["geojsonName"]:
                     case "reza": context_files = ["./app/resources/context/wheeled_bots/reza_medium_polygon.txt"]
+                    case "greece": context_files = ["./app/resources/context/wheeled_bots/greece.txt"]
                     case other:
                         print(f"Warning: unhandled value for geojsonName:", data["geojsonName"])
             elif "context_files" in config_yaml:

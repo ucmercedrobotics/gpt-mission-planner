@@ -124,7 +124,7 @@ class MissionPlanner:
             if not self.xml_valid:
                 try:
                     ret, xml_out, xml_task_count = self._generate_xml(
-                        xml_input, self.ltl
+                        xml_input, self.ltl, False
                     )
                 except Exception as e:
                     self.logger.debug(f"Error generating XML: {e}")
@@ -230,14 +230,15 @@ class MissionPlanner:
 
         return file_xml_out
 
-    def _generate_xml(self, prompt: str, count: bool = False) -> Tuple[bool, str, int]:
+    def _generate_xml(self, prompt: str, count: bool = False, validate: bool = True) -> Tuple[bool, str, int]:
         task_count: int = 0
         # generate XML mission
         xml_out: str | None = self.gpt.ask_gpt(prompt, True)
         self.logger.debug(xml_out)
         xml: str = parse_code(xml_out)
         # validate XML output
-        ret, e = self._lint_xml(xml)
+        if validate:
+            ret, e = self._lint_xml(xml)
         # check if we have a valid XML
         if not ret:
             xml = e

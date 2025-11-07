@@ -5,6 +5,7 @@ import shutil
 import time
 import json
 import yaml
+import mimetypes
 
 from pathlib import Path
 from fastapi import FastAPI, File, UploadFile, Form
@@ -49,6 +50,40 @@ class GenerateRequest(BaseModel):
 
 _openai_client = None
 
+CONTENT_TYPE_EXTENSION_MAP: dict[str, str] = {
+    "audio/webm": ".webm",
+    "video/webm": ".webm",
+    "audio/mp4": ".m4a",
+    "audio/m4a": ".m4a",
+    "audio/aac": ".aac",
+    "audio/x-m4a": ".m4a",
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
+    "audio/mpeg": ".mp3",
+    "video/quicktime": ".mov",
+    "audio/3gpp": ".3gp",
+    "audio/x-caf": ".caf",
+}
+
+
+def _infer_audio_suffix(upload_file: UploadFile) -> str:
+    """Best-effort detection of a useful file suffix for temporary audio files."""
+    if upload_file.filename:
+        suffix = Path(upload_file.filename).suffix.lower()
+        if suffix:
+            return suffix
+
+    if upload_file.content_type:
+        content_type = upload_file.content_type.lower()
+        if content_type in CONTENT_TYPE_EXTENSION_MAP:
+            return CONTENT_TYPE_EXTENSION_MAP[content_type]
+        guessed = mimetypes.guess_all_extensions(content_type)
+        if guessed:
+            return guessed[0]
+
+    return ".tmp"
+
+
 def transcribe(path: str) -> str:
     global _openai_client
     if _openai_client is None:
@@ -75,8 +110,10 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
 
         if file:
             audio_data = await file.read()
-            with tempfile.NamedTemporaryFile(suffix='.webm') as temp_file:
+            suffix = _infer_audio_suffix(file)
+            with tempfile.NamedTemporaryFile(suffix=suffix) as temp_file:
                 temp_file.write(audio_data)
+                temp_file.flush()
                 transcript = transcribe(temp_file.name)
                 yield json.dumps({"stt": transcript.text}) + '\n'
 

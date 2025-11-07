@@ -6,6 +6,7 @@ import time
 import json
 import yaml
 import mimetypes
+import subprocess
 
 from pathlib import Path
 from fastapi import FastAPI, File, UploadFile, Form
@@ -84,6 +85,42 @@ def _infer_audio_suffix(upload_file: UploadFile) -> str:
     return ".tmp"
 
 
+def _convert_to_mp3(source_path: str) -> str:
+    """Convert arbitrary audio file at source_path to mp3 if needed."""
+    if Path(source_path).suffix.lower() == ".mp3":
+        return source_path
+
+    fd, mp3_path = tempfile.mkstemp(suffix=".mp3")
+    os.close(fd)
+    command = [
+        "ffmpeg",
+        "-y",
+        "-loglevel",
+        "error",
+        "-i",
+        source_path,
+        "-vn",
+        "-codec:a",
+        "libmp3lame",
+        "-q:a",
+        "2",
+        mp3_path,
+    ]
+    try:
+        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except FileNotFoundError as exc:
+        logger.error("ffmpeg not found while converting audio: %s", exc)
+        os.remove(mp3_path)
+        raise
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr.decode("utf-8", errors="ignore") if exc.stderr else ""
+        logger.error("ffmpeg conversion failed: %s", stderr.strip())
+        os.remove(mp3_path)
+        raise
+
+    return mp3_path
+
+
 def transcribe(path: str) -> str:
     global _openai_client
     if _openai_client is None:
@@ -111,16 +148,27 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
         if file:
             audio_data = await file.read()
             suffix = _infer_audio_suffix(file)
-            with tempfile.NamedTemporaryFile(suffix=suffix) as temp_file:
-                temp_file.write(audio_data)
-                temp_file.flush()
-                transcript = transcribe(temp_file.name)
+            temp_fd, temp_path = tempfile.mkstemp(suffix=suffix)
+            try:
+                with os.fdopen(temp_fd, "wb") as temp_file:
+                    temp_file.write(audio_data)
+                    temp_file.flush()
+
+                mp3_path = _convert_to_mp3(temp_path)
+                try:
+                    transcript = transcribe(mp3_path)
+                finally:
+                    if mp3_path != temp_path and os.path.exists(mp3_path):
+                        os.remove(mp3_path)
                 yield json.dumps({"stt": transcript.text}) + '\n'
 
-                log_fname = f"{int(now)}_{os.path.basename(temp_file.name)}"
+                log_fname = f"{int(now)}_{Path(temp_path).name}"
                 log_path = Path("logs") / "audio" / log_fname
                 log_path.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(temp_file.name, log_path)
+                shutil.copy2(temp_path, log_path)
+            finally:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
 
             text = transcript.text
             log_entry["audioFile"] = log_fname

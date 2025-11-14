@@ -218,7 +218,7 @@ class MissionPlanner:
             if self.tpg is not None:
                 file_xml_out = self.tpg.replace_tree_ids_with_gps(file_xml_out)
                 self.logger.debug(f"Replaced tree IDs with GPS coordinates...")
-                if False:
+                if self.lint_xml:
                     ret, err = self._lint_xml(open(file_xml_out, "r").read())
                     if not ret:
                         self.logger.error(

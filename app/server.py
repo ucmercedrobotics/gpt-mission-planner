@@ -181,17 +181,15 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
         spin_path: str = ""
 
         try:
-            # FIXME this is bad logic, but the problem is the config file spec
             if "geojsonName" in data:
                 match data["geojsonName"]:
-                    case "reza": context_files = ["./app/resources/context/wheeled_bots/reza_medium_polygon.txt"]
-                    case "greece": context_files = ["./app/resources/context/wheeled_bots/greece.txt"]
+                    case "reza": context_files.append(["./app/resources/context/wheeled_bots/reza_medium_polygon.txt"])
+                    case "greece": context_files.append(["./app/resources/context/wheeled_bots/greece.txt"])
                     case other:
-                        print(f"Warning: unhandled value for geojsonName:", data["geojsonName"])
-            elif "context_files" in config_yaml:
-                context_files = config_yaml["context_files"]
-            else:
-                logger.warning("No additional context files found. Proceeding...")
+                        print(f"Warning: unhandled value for geojsonName:", other)
+            if "context_files" in config_yaml:
+                context_files.append(config_yaml["context_files"])
+
             if "farm_polygon" in config_yaml:
                 tpg = TreePlacementGenerator(
                     config_yaml["farm_polygon"]["points"],

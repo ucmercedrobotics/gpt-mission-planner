@@ -34,3 +34,4 @@ host: 127.0.0.1
 port: 12346
 # LTL generation?
 ltl: False
+lint_xml: True

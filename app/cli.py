@@ -70,7 +70,7 @@ def main(config: str):
         mp: MissionPlanner = MissionPlanner(
             config_yaml["token"],
             config_yaml["schema"],
-            False,
+            config_yaml.get("lint_xml", True),
             context_files,
             tpg,
             config_yaml["max_retries"],

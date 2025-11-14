@@ -1,0 +1,34 @@
+<TaskTemplate xmlns="https://robotics.ucmerced.edu/task" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="schemas/schemas/clearpath_husky.xsd">
+    <CompositeTaskInformation>
+        <TaskID>MEET_IN_MIDDLE_001</TaskID>
+        <TaskDescription>User request: "meet me in the middle of the orchard". Move the robot from its current position near the lower right corner to the center of the defined field boundaries.</TaskDescription>
+    </CompositeTaskInformation>
+    <Preconditions/>
+    <AtomicTasks>
+        <AtomicTask>
+            <TaskID>MOVE_TO_FIELD_CENTER</TaskID>
+            <TaskDescription>Navigate to the center of the orchard at latitude 39.51225 and longitude 22.42685.</TaskDescription>
+            <Action>
+                <ActionType>moveToGPSLocation</ActionType>
+                <moveToGPSLocation>
+                    <latitude>39.51225</latitude>
+                    <longitude>22.42685</longitude>
+                    <reward>1.0</reward>
+                </moveToGPSLocation>
+            </Action>
+        </AtomicTask>
+    </AtomicTasks>
+    <ActionSequence>
+        <Sequence>
+            <TaskID>MOVE_TO_FIELD_CENTER</TaskID>
+        </Sequence>
+    </ActionSequence>
+    <Outcome>
+        <State>atEndPoint</State>
+    </Outcome>
+    <Exits>
+        <Exit>
+            <Type>nominal</Type>
+        </Exit>
+    </Exits>
+</TaskTemplate>

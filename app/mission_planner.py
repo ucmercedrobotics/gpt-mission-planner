@@ -20,6 +20,9 @@ ANTHROPIC: str = "claude-sonnet-4-20250514"
 GEMINI: str = "gemini/gemini-2.5-pro"
 HUMAN_REVIEW: bool = False
 EXAMPLE_RUNS: int = 5
+# select model
+MODEL: str = OPENAI
+ARBITER: str = ANTHROPIC
 
 
 class MissionPlanner:
@@ -27,6 +30,7 @@ class MissionPlanner:
         self,
         token_path: str,
         schema_paths: list[str],
+        xml_lint: bool,
         context_files: list[str],
         tpg: TreePlacementGenerator,
         max_retries: int,
@@ -42,6 +46,7 @@ class MissionPlanner:
         self.logger: logging.Logger = logger
         # set schema and farm file paths
         self.schema_paths: list[str] = schema_paths
+        self.xml_lint: bool = xml_lint
         self.context_files: list[str] = context_files
         # tree placement generator init
         if tpg is not None:
@@ -65,7 +70,7 @@ class MissionPlanner:
         self.retry: int = -1
         # init gpt interface
         self.gpt: LLMInterface = LLMInterface(
-            self.logger, token_path, OPENAI, max_tokens, temperature=temperature
+            self.logger, token_path, MODEL, max_tokens, temperature=temperature
         )
         self.gpt.init_context(self.schema_paths, self.context_files)
         # init Promela compiler
@@ -77,11 +82,11 @@ class MissionPlanner:
             self.human_review: bool = HUMAN_REVIEW
             # init XML mission gpt interface
             self.pml_gpt: LLMInterface = LLMInterface(
-                self.logger, token_path, OPENAI, max_tokens, temperature=temperature
+                self.logger, token_path, MODEL, max_tokens, temperature=temperature
             )
             # Claude human verification substitute
             self.verification_checker: LLMInterface = LLMInterface(
-                self.logger, token_path, OPENAI, max_tokens, temperature=temperature
+                self.logger, token_path, ARBITER, max_tokens, temperature=temperature
             )
             # object for compiling Promela from XML
             self.promela: PromelaCompiler = PromelaCompiler(
@@ -233,16 +238,15 @@ class MissionPlanner:
 
     def _generate_xml(self, prompt: str, count: bool = False, validate: bool = True) -> Tuple[bool, str, int]:
         task_count: int = 0
+        ret: bool = True
         # generate XML mission
         xml_out: str | None = self.gpt.ask_gpt(prompt, True)
         self.logger.debug(xml_out)
         xml: str = parse_code(xml_out)
-        # validate XML output
-        if validate:
-            ret, e = self._lint_xml(xml)
-        else:
+        if not validate:
             return True, xml, task_count
-        # check if we have a valid XML
+
+        ret, e = self._lint_xml(xml)
         if not ret:
             xml = e
             self.logger.warning(f"Failure to lint XML: {e}")

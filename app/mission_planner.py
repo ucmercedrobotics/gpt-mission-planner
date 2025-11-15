@@ -30,7 +30,7 @@ class MissionPlanner:
         self,
         token_path: str,
         schema_paths: list[str],
-        xml_lint: bool,
+        lint_xml: bool,
         context_files: list[str],
         tpg: TreePlacementGenerator,
         max_retries: int,
@@ -46,7 +46,7 @@ class MissionPlanner:
         self.logger: logging.Logger = logger
         # set schema and farm file paths
         self.schema_paths: list[str] = schema_paths
-        self.xml_lint: bool = xml_lint
+        self.lint_xml: bool = lint_xml
         self.context_files: list[str] = context_files
         # tree placement generator init
         if tpg is not None:

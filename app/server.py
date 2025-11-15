@@ -133,6 +133,19 @@ def transcribe(path: str) -> str:
         )
         return transcript
 
+@app.get("/context_files")
+async def get_context_files():
+    try:
+        path = Path("./app/resources/context/wheeled_bots")
+        if not path.exists():
+            return {"files": []}
+
+        files = [f.name for f in path.iterdir() if f.is_file()]
+        return {"files": files}
+    except Exception as e:
+        logger.error(f"Error getting context files: {e}")
+        return {"files": []}
+
 @app.post("/generate")
 async def generate(request: str = Form(...), file: UploadFile = File(None)):
     async def _generate():
@@ -181,14 +194,22 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
         spin_path: str = ""
 
         try:
-            if "geojsonName" in data:
-                match data["geojsonName"]:
-                    case "reza": context_files.append(["./app/resources/context/wheeled_bots/reza_medium_polygon.txt"])
-                    case "greece": context_files.append(["./app/resources/context/wheeled_bots/greece.txt"])
-                    case other:
-                        print(f"Warning: unhandled value for geojsonName:", other)
-            if "context_files" in config_yaml:
-                context_files.append(config_yaml["context_files"])
+            if "contextFiles" in data:
+                # Handle contextFiles as a list of filenames
+                requested_files = data["contextFiles"]
+                if isinstance(requested_files, str):
+                    requested_files = [requested_files]
+
+                wheeled_bots_path = Path("./app/resources/context/wheeled_bots")
+                for filename in requested_files:
+                    file_path = wheeled_bots_path / filename
+                    if file_path.exists() and file_path.is_file():
+                        context_files.append(str(file_path))
+                    else:
+                        logger.warning(f"Requested context file not found: {filename}")
+
+            elif "context_files" in config_yaml:
+                context_files.extend(config_yaml["context_files"])
 
             if "farm_polygon" in config_yaml:
                 tpg = TreePlacementGenerator(
@@ -203,6 +224,8 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
                     "No farm polygon found. Assuming we're not dealing with an orchard grid..."
                 )
 
+            lint_xml = data.get("lintXml", config_yaml.get("lint_xml", True))
+
             # if user specifies config key -> optional keys
             ltl = config_yaml.get(LTL_KEY) or False
             pml_template_path = config_yaml.get(PROMELA_TEMPLATE_KEY) or ""
@@ -216,6 +239,7 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
             mp = MissionPlanner(
                 config_yaml["token"],
                 [f"schemas/schemas/{data["schema"]}.xsd"],
+                lint_xml,
                 context_files,
                 tpg,
                 config_yaml["max_retries"],

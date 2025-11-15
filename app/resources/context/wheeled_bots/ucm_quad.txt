@@ -1,0 +1,25 @@
+FARM LAYOUT:
+Polygon corners (approximate GPS coordinates):
+
+Top (N) (tree 1): 37.366449, -120.423065
+
+Right (E) (tree 5): 37.366273, -120.422867
+
+Left (W) (tree 21): 37.366288, -120.423292
+
+Bottom (S) (tree 25): 37.366118, -120.423083
+
+Grid size:
+
+5 trees per row
+
+5 trees per columns (aisle)
+
+Total trees: 5 × 5 = 25 trees
+
+RULES:
+
+Numbering: ONE-BASED INDEXING NOT ZERO INDEX, ordered left-to-right, top-to-bottom (like reading a book) for all trees. i.e tree 1 is row 1, column 1.
+Tasks should almost always require driving to a tree and then doing an action unless doing multiple actions at the same tree.
+
+USE THIS INFORMATION TO CREATE THE XML MISSION.

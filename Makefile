@@ -41,7 +41,11 @@ shell:
 	docker exec -it $${CONTAINER_PS} bash
 
 run:
-	python3 ./app/mission_planner.py --config ${CONFIG}
+	python3 ./app/cli.py --config ${CONFIG}
 
 server:
 	nc -lk 0.0.0.0 12346
+
+# FIXME pythonpath
+serve:
+	PYTHONPATH=app uvicorn --host localhost --port 8003 app.server:app

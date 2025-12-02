@@ -1,13 +1,8 @@
 import logging
 import os
 from typing import Tuple, Any
-import time
-
-import click
-import yaml
 
 from gpt_interface import LLMInterface
-from network_interface import NetworkInterface
 from utils.os_utils import (
     execute_shell_cmd,
     write_out_file,
@@ -18,12 +13,8 @@ from utils.xml_utils import (
     validate_output,
     count_xml_tasks,
 )
-from utils.spot_utils import add_init_state, init_state_macro, rename_ltl_macros
 from utils.gps_utils import TreePlacementGenerator
 
-LTL_KEY: str = "ltl"
-PROMELA_TEMPLATE_KEY: str = "promela_template"
-SPIN_PATH_KEY: str = "spin_path"
 OPENAI: str = "openai/gpt-5"
 ANTHROPIC: str = "claude-sonnet-4-20250514"
 GEMINI: str = "gemini/gemini-2.5-pro"
@@ -39,7 +30,7 @@ class MissionPlanner:
         self,
         token_path: str,
         schema_paths: list[str],
-        xml_lint: bool,
+        lint_xml: bool,
         context_files: list[str],
         tpg: TreePlacementGenerator,
         max_retries: int,
@@ -55,7 +46,7 @@ class MissionPlanner:
         self.logger: logging.Logger = logger
         # set schema and farm file paths
         self.schema_paths: list[str] = schema_paths
-        self.xml_lint: bool = xml_lint
+        self.lint_xml: bool = lint_xml
         self.context_files: list[str] = context_files
         # tree placement generator init
         if tpg is not None:
@@ -117,12 +108,6 @@ class MissionPlanner:
 
             spot.setup()
 
-    def configure_network(self, host: str, port: int) -> None:
-        # network interface
-        self.nic: NetworkInterface = NetworkInterface(self.logger, host, port)
-        # start connection to ROS agent
-        self.nic.init_socket()
-
     def get_promela_output_path(self) -> str:
         return self.promela_path
 
@@ -131,19 +116,20 @@ class MissionPlanner:
         self.xml_valid = False
         self.ltl_valid = False
 
-    def run(self) -> None:
+    # TODO stream response
+    def run(self, prompt: str) -> None:
         ret: bool = False
+        file_xml_out = None
         self.reset()
         # ask user for their mission plan
-        mp_input: str = input("Enter the specifications for your mission plan: ")
-        xml_input: str = mp_input
-        ltl_input: str = mp_input
+        xml_input: str = prompt
+        ltl_input: str = prompt
         while not ret and self.retry < self.max_retries:
             # first ask of XML and LTL
             if not self.xml_valid:
                 try:
                     ret, xml_out, xml_task_count = self._generate_xml(
-                        xml_input, self.ltl
+                        xml_input, self.ltl, False
                     )
                 except Exception as e:
                     self.logger.debug(f"Error generating XML: {e}")
@@ -172,6 +158,7 @@ class MissionPlanner:
 
             # if we're formally verifying
             if self.ltl:
+                from .utils.spot_utils import rename_ltl_macros
                 # preliminary check, but can be improved to be more thorough
                 if ltl_task_count != xml_task_count:
                     more_less: str = (
@@ -210,7 +197,7 @@ class MissionPlanner:
                     self.pml_gpt.add_context(err)
                     continue
                 # does Arbiter LLM or the human agree?
-                ret, err = self._spot_verification(mp_input, macros)
+                ret, err = self._spot_verification(prompt, macros)
                 if not ret:
                     self.retry += 1
                     self.pml_gpt.add_context(
@@ -231,42 +218,35 @@ class MissionPlanner:
             if self.tpg is not None:
                 file_xml_out = self.tpg.replace_tree_ids_with_gps(file_xml_out)
                 self.logger.debug(f"Replaced tree IDs with GPS coordinates...")
-                ret, err = self._lint_xml(open(file_xml_out, "r").read())
-                if not ret:
-                    self.logger.error(
-                        f"Failed to lint XML after replacing tree IDs: {err}"
-                    )
-                    continue
+                if self.lint_xml:
+                    ret, err = self._lint_xml(open(file_xml_out, "r").read())
+                    if not ret:
+                        self.logger.error(
+                            f"Failed to lint XML after replacing tree IDs: {err}"
+                        )
+                        continue
 
-            # failure of this will only occur if formal verification was enabled.
-            # otherwise it sends out XML mission via TCP
-            if ret:
-                # send off mission plan to TCP client
-                self.nic.send_file(file_xml_out)
-                self.logger.debug(
-                    f"Sending mission XML {file_xml_out} out to robot over TCP..."
-                )
-            else:
-                self.logger.error("Unable to formally verify from your prompt...")
+                    if not ret:
+                        self.logger.error("Unable to formally verify from your prompt...")
 
         # clear before new query
         self.gpt.reset_context(self.gpt.initial_context_length)
         if self.ltl:
             self.pml_gpt.reset_context(self.pml_gpt.initial_context_length)
 
-        self.nic.close_socket()
+        return file_xml_out
 
-    def _generate_xml(self, prompt: str, count: bool = False) -> Tuple[bool, str, int]:
+    def _generate_xml(self, prompt: str, count: bool = False, validate: bool = True) -> Tuple[bool, str, int]:
         task_count: int = 0
         ret: bool = True
         # generate XML mission
         xml_out: str | None = self.gpt.ask_gpt(prompt, True)
         self.logger.debug(xml_out)
         xml: str = parse_code(xml_out)
-        # validate XML output
-        if self.xml_lint:
-            ret, e = self._lint_xml(xml)
-        # check if we have a valid XML
+        if not validate:
+            return True, xml, task_count
+
+        ret, e = self._lint_xml(xml)
         if not ret:
             xml = e
             self.logger.warning(f"Failure to lint XML: {e}")
@@ -347,6 +327,7 @@ class MissionPlanner:
     def _ltl_validation(
         self, promela_string: str, macros: str, ltl_out: str
     ) -> Tuple[bool, str]:
+        from .utils.spot_utils import init_state_macro, add_init_state
         ret: bool = False
 
         macros = init_state_macro(macros)
@@ -469,94 +450,3 @@ class MissionPlanner:
             ret = False
 
         return ret, e
-
-
-@click.command()
-@click.option(
-    "--config",
-    default="./app/config/localhost.yaml",
-    help="YAML config file",
-)
-def main(config: str):
-    with open(config, "r") as file:
-        config_yaml: dict = yaml.safe_load(file)
-
-    context_files: list[str] = []
-
-    # don't generate/check LTL by default
-    ltl: bool = False
-    pml_template_path: str = ""
-    spin_path: str = ""
-
-    try:
-        # configure logger
-        logging.basicConfig(level=logging._nameToLevel[config_yaml["logging"]])
-        # OpenAI loggers turned off completely.
-        logging.getLogger("openai").setLevel(logging.CRITICAL)
-        logging.getLogger("anthropic").setLevel(logging.CRITICAL)
-        logging.getLogger("LiteLLM").setLevel(logging.CRITICAL)
-        logging.getLogger("httpx").setLevel(logging.CRITICAL)
-        logging.getLogger("httpcore").setLevel(logging.CRITICAL)
-        logger: logging.Logger = logging.getLogger()
-
-        # you don't necessarily need context
-        if "context_files" in config_yaml:
-            context_files = config_yaml["context_files"]
-        else:
-            logger.warning("No additional context files found. Proceeding...")
-        if "farm_polygon" in config_yaml:
-            tpg = TreePlacementGenerator(
-                config_yaml["farm_polygon"]["points"],
-                config_yaml["farm_polygon"]["dimensions"],
-            )
-            logger.debug("Farm polygon points defined are: %s", tpg.polygon_coords)
-            logger.debug("Farm dimensions defined are: %s", tpg.dimensions)
-        else:
-            tpg = None
-            logger.warning(
-                "No farm polygon found. Assuming we're not dealing with an orchard grid..."
-            )
-
-        # if user specifies config key -> optional keys
-        ltl = config_yaml.get(LTL_KEY) or False
-        pml_template_path = config_yaml.get(PROMELA_TEMPLATE_KEY) or ""
-        spin_path = config_yaml.get(SPIN_PATH_KEY) or ""
-        if ltl and not (pml_template_path and spin_path):
-            ltl = False
-            logger.warning(
-                "No spin configuration found. Proceeding without formal verification..."
-            )
-
-        mp: MissionPlanner = MissionPlanner(
-            config_yaml["token"],
-            config_yaml["schema"],
-            config_yaml.get("xml_lint", True),
-            context_files,
-            tpg,
-            config_yaml["max_retries"],
-            config_yaml["max_tokens"],
-            config_yaml["temperature"],
-            ltl,
-            pml_template_path,
-            spin_path,
-            config_yaml["log_directory"],
-            logger,
-        )
-    except yaml.YAMLError as exc:
-        logger.error(f"Improper YAML config: {exc}")
-
-    while True:
-        try:
-            mp.configure_network(config_yaml["host"], int(config_yaml["port"]))
-        except ConnectionRefusedError:
-            logger.error(
-                f"Unable to connect to {config_yaml['host']}:{config_yaml['port']}. Is the server running? Robot could be busy executing a previous mission."
-            )
-            time.sleep(1)
-            continue
-
-        mp.run()
-
-
-if __name__ == "__main__":
-    main()

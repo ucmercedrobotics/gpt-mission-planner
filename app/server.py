@@ -32,7 +32,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 config = "./app/config/localhost.yaml"
-with open(config, 'r') as f:
+with open(config, "r") as f:
     config_yaml = yaml.safe_load(f)
 
 app = FastAPI()
@@ -46,8 +46,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 class GenerateRequest(BaseModel):
     text: str | None
+
 
 _openai_client = None
 
@@ -107,7 +109,9 @@ def _convert_to_mp3(source_path: str) -> str:
         mp3_path,
     ]
     try:
-        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(
+            command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
     except FileNotFoundError as exc:
         logger.error("ffmpeg not found while converting audio: %s", exc)
         os.remove(mp3_path)
@@ -125,13 +129,14 @@ def transcribe(path: str) -> str:
     global _openai_client
     if _openai_client is None:
         _openai_client = OpenAI()
-    with open(path, 'rb') as audio_file:
+    with open(path, "rb") as audio_file:
         transcript = _openai_client.audio.transcriptions.create(
             model="gpt-4o-mini-transcribe",
             file=audio_file,
             prompt="The user is a farmer speaking instructions for an ag-tech robot.",
         )
         return transcript
+
 
 @app.get("/context_files")
 async def get_context_files():
@@ -145,6 +150,7 @@ async def get_context_files():
     except Exception as e:
         logger.error(f"Error getting context files: {e}")
         return {"files": []}
+
 
 @app.post("/generate")
 async def generate(request: str = Form(...), file: UploadFile = File(None)):
@@ -173,7 +179,7 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
                 finally:
                     if mp3_path != temp_path and os.path.exists(mp3_path):
                         os.remove(mp3_path)
-                yield json.dumps({"stt": transcript.text}) + '\n'
+                yield json.dumps({"stt": transcript.text}) + "\n"
 
                 log_fname = f"{int(now)}_{Path(temp_path).name}"
                 log_path = Path("logs") / "audio" / log_fname
@@ -238,7 +244,7 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
 
             mp = MissionPlanner(
                 config_yaml["token"],
-                [f"schemas/schemas/{data["schema"]}.xsd"],
+                [f"schemas/{data['schema']}.xsd"],
                 lint_xml,
                 context_files,
                 tpg,
@@ -249,21 +255,21 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
                 pml_template_path,
                 spin_path,
                 config_yaml["log_directory"],
-                logger
+                logger,
             )
         except yaml.YAMLError as exc:
             logger.error(f"Improper YAML config: {exc}")
 
         file_xml_out = mp.run(text)
-        with open(file_xml_out, 'r') as f:
+        with open(file_xml_out, "r") as f:
             result = f.read()
 
         log_entry["response"] = result
         os.makedirs("logs", exist_ok=True)
         with open("logs/requests.log", "a") as f:
-            f.write(json.dumps(log_entry) + '\n')
+            f.write(json.dumps(log_entry) + "\n")
 
-        yield json.dumps({"result": result}) + '\n'
+        yield json.dumps({"result": result}) + "\n"
 
     return StreamingResponse(
         _generate(),
@@ -271,5 +277,5 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-        }
+        },
     )

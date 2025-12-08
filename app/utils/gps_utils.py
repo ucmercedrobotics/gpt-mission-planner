@@ -135,29 +135,45 @@ class TreePlacementGenerator:
         return self.tree_points
 
     def replace_tree_ids_with_gps(self, xml_file: str) -> str:
-        """Replace the id attribute of MoveToTreeID elements with their GPS coordinates.
-
+        """
+        Replace the id attribute of MoveToTreeID elements with the closest row waypoint's GPS coordinates.
+        If there was a previous movement, use the closest waypoint to the previous location; otherwise, use any waypoint.
         Args:
             xml_file (str): Path to the XML file to modify.
-
         Returns:
             str: Path to the modified XML file.
         """
         root = etree.parse(xml_file).getroot()
 
+        previous_lat = None
+        previous_lon = None
+
         for tree_elem in root.findall(".//MoveToTreeID"):
             id = tree_elem.get("id")
             if id is None:
                 continue
-            gps_coords = self.tree_points[int(id) - 1]
-            if gps_coords:
-                # Set the latitude and longitude attributes to the GPS values
-                tree_elem.set("latitude", f"{gps_coords['lat']}")
-                tree_elem.set("longitude", f"{gps_coords['lon']}")
-                # Remove the id attribute
-                tree_elem.attrib.pop("id", None)
-                # Change the tag name to MoveToGPSLocation (no namespace)
-                tree_elem.tag = "MoveToGPSLocation"
+            tree_info = self.tree_points[int(id) - 1]
+            waypoints = tree_info.get("row_waypoints", [])
+            chosen_wp = None
+            # If there was a previous movement, pick the closest waypoint
+            if previous_lat is not None and previous_lon is not None and waypoints:
+
+                def dist(wp):
+                    return (wp[0] - previous_lat) ** 2 + (wp[1] - previous_lon) ** 2
+
+                chosen_wp = min(waypoints, key=dist)
+            elif waypoints:
+                chosen_wp = waypoints[0]
+            else:
+                # Fallback to tree point if no waypoints
+                chosen_wp = (tree_info["lat"], tree_info["lon"])
+
+            tree_elem.set("latitude", f"{chosen_wp[0]}")
+            tree_elem.set("longitude", f"{chosen_wp[1]}")
+            tree_elem.attrib.pop("id", None)
+            tree_elem.tag = "MoveToGPSLocation"
+
+            previous_lat, previous_lon = chosen_wp
 
         etree.indent(root, space="    ")  # 4 spaces indentation
         with open(xml_file, "w", encoding="utf-8") as f:
@@ -250,6 +266,7 @@ class TreePlacementGenerator:
         rows = len(trees_per_row)
         tree_points = []
         tree_counter = 1
+        positions = {}
 
         for row_index, num_trees in enumerate(trees_per_row):
             t = row_index / (rows - 1) if rows > 1 else 0  # interpolation factor
@@ -277,9 +294,22 @@ class TreePlacementGenerator:
                         "col": col_index + 1,
                         "lat": lat,
                         "lon": lon,
+                        "row_waypoints": [],
                     }
                 )
+                positions[(row_index, col_index)] = (x, y, tree_counter - 1)
                 tree_counter += 1
+
+        # adding waypoints in between trees
+        for (row_idx, col_idx), (x, y, idx) in positions.items():
+            next_col_key = (row_idx, col_idx + 1)
+            if next_col_key in positions:
+                nx, ny, nidx = positions[next_col_key]
+                mx = (x + nx) / 2
+                my = (y + ny) / 2
+                mlat, mlon = self._transform_to_global_coords(mx, my, rotation_info)
+                tree_points[idx]["row_waypoints"].append((mlat, mlon))
+                tree_points[nidx]["row_waypoints"].append((mlat, mlon))
 
         return tree_points
 

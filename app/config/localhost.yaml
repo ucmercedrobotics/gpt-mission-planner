@@ -5,7 +5,7 @@ token: ".env"
 max_retries: 10
 max_tokens: 10000
 temperature: 0.2
-log_directory: "./app/gpt_outputs/rap"
+log_directory: "./app/gpt_outputs/tfr"
 # schema per 1872.1-2024 + farm layout
 schema:
   - "schemas/amiga_btcpp.xsd"

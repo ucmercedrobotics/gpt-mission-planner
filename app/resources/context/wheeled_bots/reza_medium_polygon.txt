@@ -13,7 +13,7 @@ Grid size:
 
 8 trees per row
 
-18 trees per columns (aisle)
+18 trees per columns
 
 Total trees: 18 × 8 = 144 trees
 
@@ -22,7 +22,7 @@ RULES:
 Numbering: ONE-BASED INDEXING NOT ZERO INDEX, ordered left-to-right, top-to-bottom (like reading a book) for all trees. i.e tree 1 is row 1, column 1.
 Tasks should almost always require driving to a tree and then doing an action unless doing multiple actions at the same tree.
 
-You cannot plan a path in between rows of aisles of trees!
-If you require to move between aisles to sample a tree you must also include intermediate trees that get you out and in aisles (heads of aisles).
+You cannot drive through columns of trees!
+If you require to move between columns to sample a tree you must also include intermediate trees that get you out and in columns (first or last row).
 
 USE THIS INFORMATION TO CREATE THE XML MISSION.

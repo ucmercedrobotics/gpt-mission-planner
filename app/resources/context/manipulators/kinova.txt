@@ -1,0 +1,18 @@
+**Use REP-103 rotation names (roll = rotate about X, pitch = rotate about Y, yaw = rotate about Z).
+However, apply these rotations in the end-effector’s own coordinate frame, where:
+
++X = left
+
++Y = up
+
++Z = forward.**
+
+Because the end effector faces +Z instead of +X, the meanings change:
+
+Turn left/right = rotate the forward axis (+Z) toward ±X → rotation about Y → pitch
+
+Tilt up/down = rotate the forward axis (+Z) toward ±Y → rotation about X → roll
+
+Twist around the tool’s forward axis = rotation about Z → yaw
+
+Nothing about REP-103 is changed — only the frame they are applied in.

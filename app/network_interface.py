@@ -17,6 +17,9 @@ class NetworkInterface:
         self.client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
     def init_socket(self) -> None:
+        # Create a new socket if the previous one was closed
+        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.client_socket.connect((self.host, self.port))
 
     def _send_length_prefixed_data(self, data: bytes) -> None:

@@ -10,12 +10,9 @@
 
 <!-- [![arXiv](https://img.shields.io/badge/arXiv-2409.04653-b31b1b.svg)](https://arxiv.org/abs/2409.04653) -->
 
-Make sure you initialize the repo with pre-commit hooks:
-```bash
-make repo-init
-```
-
 ## How To Run GPT Mission Planner
+https://github.com/user-attachments/assets/cd18a3b1-1cd3-48e9-ae74-825cca88b508
+
 ### GPT Token
 Create a `.env` file and add your API tokens:
 ```bash

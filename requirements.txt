@@ -15,3 +15,5 @@ openai==1.99.9
 fastapi
 uvicorn
 python-multipart
+# for testing
+pytest==9.0.2

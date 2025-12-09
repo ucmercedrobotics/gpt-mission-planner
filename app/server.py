@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from mission_planner import MissionPlanner
-from utils.gps_utils import TreePlacementGenerator
+from orchards.tree_placement_generator import TreePlacementGenerator
 
 load_dotenv()
 

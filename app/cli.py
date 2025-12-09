@@ -1,15 +1,15 @@
 import logging
 import yaml
 import click
-import time
 
 from mission_planner import MissionPlanner
-from utils.gps_utils import TreePlacementGenerator
+from orchards.tree_placement_generator import TreePlacementGenerator
 from network_interface import NetworkInterface
 
 LTL_KEY: str = "ltl"
 PROMELA_TEMPLATE_KEY: str = "promela_template"
 SPIN_PATH_KEY: str = "spin_path"
+
 
 @click.command()
 @click.option(
@@ -92,7 +92,11 @@ def main(config: str):
         file_xml_out = mp.run(mp_input)
 
         nic.init_socket()
-        nic.send_file(file_xml_out)
+        # Send XML and tree points if available
+        tree_points = (
+            mp.tree_points if hasattr(mp, "tree_points") and mp.tree_points else None
+        )
+        nic.send_file(file_xml_out, tree_points)
         nic.close_socket()
 
 

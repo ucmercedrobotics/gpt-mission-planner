@@ -13,7 +13,7 @@ from utils.xml_utils import (
     validate_output,
     count_xml_tasks,
 )
-from utils.gps_utils import TreePlacementGenerator
+from orchards.tree_placement_generator import TreePlacementGenerator
 
 OPENAI: str = "openai/gpt-5"
 ANTHROPIC: str = "claude-sonnet-4-20250514"
@@ -159,6 +159,7 @@ class MissionPlanner:
             # if we're formally verifying
             if self.ltl:
                 from .utils.spot_utils import rename_ltl_macros
+
                 # preliminary check, but can be improved to be more thorough
                 if ltl_task_count != xml_task_count:
                     more_less: str = (
@@ -227,7 +228,9 @@ class MissionPlanner:
                         continue
 
                     if not ret:
-                        self.logger.error("Unable to formally verify from your prompt...")
+                        self.logger.error(
+                            "Unable to formally verify from your prompt..."
+                        )
 
         # clear before new query
         self.gpt.reset_context(self.gpt.initial_context_length)
@@ -236,7 +239,9 @@ class MissionPlanner:
 
         return file_xml_out
 
-    def _generate_xml(self, prompt: str, count: bool = False, validate: bool = True) -> Tuple[bool, str, int]:
+    def _generate_xml(
+        self, prompt: str, count: bool = False, validate: bool = True
+    ) -> Tuple[bool, str, int]:
         task_count: int = 0
         ret: bool = True
         # generate XML mission
@@ -328,6 +333,7 @@ class MissionPlanner:
         self, promela_string: str, macros: str, ltl_out: str
     ) -> Tuple[bool, str]:
         from .utils.spot_utils import init_state_macro, add_init_state
+
         ret: bool = False
 
         macros = init_state_macro(macros)

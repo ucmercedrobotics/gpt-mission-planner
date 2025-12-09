@@ -1,15 +1,15 @@
 import logging
 import yaml
 import click
-import time
 
 from mission_planner import MissionPlanner
-from utils.gps_utils import TreePlacementGenerator
+from orchards.tree_placement_generator import TreePlacementGenerator
 from network_interface import NetworkInterface
 
 LTL_KEY: str = "ltl"
 PROMELA_TEMPLATE_KEY: str = "promela_template"
 SPIN_PATH_KEY: str = "spin_path"
+
 
 @click.command()
 @click.option(

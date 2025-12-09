@@ -92,7 +92,11 @@ def main(config: str):
         file_xml_out = mp.run(mp_input)
 
         nic.init_socket()
-        nic.send_file(file_xml_out)
+        # Send XML and tree points if available
+        tree_points = (
+            mp.tree_points if hasattr(mp, "tree_points") and mp.tree_points else None
+        )
+        nic.send_file(file_xml_out, tree_points)
         nic.close_socket()
 
 

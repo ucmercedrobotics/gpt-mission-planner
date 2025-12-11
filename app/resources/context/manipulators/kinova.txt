@@ -1,0 +1,44 @@
+Orientation Rules
+
+Use REP-103 names:
+
+Roll = rotate about X
+
+Pitch = rotate about Y
+
+Yaw = rotate about Z
+
+BUT apply them in the end-effector’s own coordinate frame, defined as:
+
++X = left
+
++Y = up
+
++Z = forward (tool pointing direction)
+
+Because the tool points along +Z instead of REP-103’s usual +X, the meanings of the rotations shift:
+
+Resulting Motion Meanings (with signs)
+1. Turn left / right → Pitch (± about Y)
+
+Rotation about the Y axis rotates the forward axis (+Z) toward left or right.
+
++pitch = turn left (rotate +Z toward +X)
+
+–pitch = turn right (rotate +Z toward –X)
+
+2. Tilt up / down → Roll (± about X)
+
+Rotation about the X axis rotates the forward axis (+Z) toward up or down.
+
++roll = tilt down (rotate +Z toward –Y)
+
+–roll = tilt up (rotate +Z toward +Y)
+
+3. Twist clockwise / counter-clockwise → Yaw (± about Z)
+
+Rotation about the Z axis spins around the tool’s own forward direction.
+
++yaw = twist clockwise (right-hand rule)
+
+–yaw = twist counter-clockwise

@@ -6,32 +6,45 @@ max_retries: 10
 max_tokens: 10000
 temperature: 0.2
 log_directory: "./app/gpt_outputs/tfr"
-# schema per 1872.1-2024 + farm layout
 schema:
   - "schemas/amiga_btcpp.xsd"
   # - "schemas/clearpath_husky.xsd"
 # NOTE: this is only for backwards compat when we change schema formats
 lint_xml: True
 context_files:
-  # - "./app/resources/context/wheeled_bots/thompson.txt"
-  - "./app/resources/context/wheeled_bots/reza_medium_polygon.txt"
+  - "./app/resources/context/wheeled_bots/ucm_quad.txt"
+  # - "./app/resources/context/wheeled_bots/reza_medium_polygon.txt"
   # - "./app/resources/context/wheeled_bots/greece.txt"
 farm_polygon:
+  # QUAD
   points:
     # start from north west corner (as best as possible)
-    - lon: -120.42079453
-      lat: 37.26643908
-    # go clockwise
-    - lon: -120.42012318
-      lat: 37.26644777
-    - lon: -120.42011635
-      lat: 37.26578860
-    - lon: -120.42079999
-      lat: 37.26578751
+    - lon: -120.423065
+      lat: 37.366449
+    - lon: -120.422867
+      lat: 37.366273
+    - lon: -120.423292
+      lat: 37.366288
+    - lon: -120.423083
+      lat: 37.366118
   dimensions:
-    # draw this out from top (north) to bottom (south)
-    - row: 18
-      col: 8
+    - row: 10
+      col: 5
+  # REZA MEDIUM POLYGON
+  # points:
+  #   # start from north west corner (as best as possible)
+  #   - lon: -120.42079453
+  #     lat: 37.26643908
+  #   - lon: -120.42012318
+  #     lat: 37.26644777
+  #   - lon: -120.42011635
+  #     lat: 37.26578860
+  #   - lon: -120.42079999
+  #     lat: 37.26578751
+  # dimensions:
+  #   # draw this out from top (north) to bottom (south)
+  #   - row: 18
+  #     col: 8
 # who to send this too?
 host: 127.0.0.1
 port: 12346

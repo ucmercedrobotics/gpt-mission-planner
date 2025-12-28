@@ -54,6 +54,7 @@ class TreePlacementGenerator:
             - col: Column number within row (1-based)
             - lat: Latitude in decimal degrees
             - lon: Longitude in decimal degrees
+            - row_waypoints: List of (lat, lon) tuples for waypoints between trees in the same row
         """
         # Convert to UTM and create polygon
         polygon_xy = [

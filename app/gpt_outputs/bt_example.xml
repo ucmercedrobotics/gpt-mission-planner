@@ -2,11 +2,11 @@
   <Mission>sample trees 10 and 60</Mission>
   <BehaviorTree ID="mission_sample_10_60">
     <Sequence>
-      <MoveToTreeID name="MoveTo_Tree_10" action_name="follow_gps_waypoints" object_angle="{tree10_angle}" id="10" />
+      <MoveToTreeID name="MoveTo_Tree_10" action_name="follow_tree_id_waypoint" object_angle="{tree10_angle}" id="10" />
       <SampleLeaf name="Sample_Tree_10" action_name="navigate_via_lidar" tree_angle="{tree10_angle}" />
-      <MoveToTreeID name="Exit_To_Top_Row_Col2_Tree_2" action_name="follow_gps_waypoints" id="2" />
-      <MoveToTreeID name="Traverse_Top_Row_To_Col4_Tree_4" action_name="follow_gps_waypoints" id="4" />
-      <MoveToTreeID name="MoveTo_Tree_60" action_name="follow_gps_waypoints" object_angle="{tree60_angle}" id="60" />
+      <MoveToTreeID name="Exit_To_Top_Row_Col2_Tree_2" action_name="follow_tree_id_waypoint" id="2" />
+      <MoveToTreeID name="Traverse_Top_Row_To_Col4_Tree_4" action_name="follow_tree_id_waypoint" id="4" />
+      <MoveToTreeID name="MoveTo_Tree_60" action_name="follow_tree_id_waypoint" object_angle="{tree60_angle}" id="60" />
       <SampleLeaf name="Sample_Tree_60" action_name="navigate_via_lidar" tree_angle="{tree60_angle}" />
     </Sequence>
   </BehaviorTree>

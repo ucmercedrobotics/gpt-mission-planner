@@ -44,7 +44,7 @@ run:
 	python3 ./app/cli.py --config ${CONFIG}
 
 server:
-	nc -lk 0.0.0.0 12346
+	nc -lk 0.0.0.0 12346 > test.bin
 
 # FIXME pythonpath
 serve:

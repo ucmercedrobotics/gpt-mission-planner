@@ -4,10 +4,14 @@ const promptInput = document.getElementById("prompt");
 const sttOutput = document.getElementById("stt");
 const resultOutput = document.getElementById("result");
 const lintXmlCheckbox = document.getElementById("lintXml");
+const tcpHostInput = document.getElementById("tcpHost");
+const tcpPortInput = document.getElementById("tcpPort");
 const sendBtn = document.getElementById("sendBtn");
 const micBtn = document.getElementById("micBtn");
 const recordBtn = document.getElementById("recordBtn");
 const statusEl = document.getElementById("status");
+const settingsBtn = document.getElementById("settingsBtn");
+const settingsPanel = document.getElementById("settingsPanel");
 
 let recognition = null;
 let recording = false;
@@ -16,6 +20,21 @@ let audioChunks = [];
 
 const setStatus = (text) => {
   statusEl.textContent = text;
+};
+
+const closeSettingsPanel = () => {
+  settingsPanel.classList.add("is-hidden");
+  settingsBtn.setAttribute("aria-expanded", "false");
+};
+
+const toggleSettingsPanel = () => {
+  const isHidden = settingsPanel.classList.contains("is-hidden");
+  if (isHidden) {
+    settingsPanel.classList.remove("is-hidden");
+    settingsBtn.setAttribute("aria-expanded", "true");
+    return;
+  }
+  closeSettingsPanel();
 };
 
 const fetchSchemas = async () => {
@@ -39,6 +58,10 @@ const fetchContextFiles = async () => {
     const res = await fetch("/context_files");
     const data = await res.json();
     contextSelect.innerHTML = "";
+    const noneOption = document.createElement("option");
+    noneOption.value = "";
+    noneOption.textContent = "No context";
+    contextSelect.appendChild(noneOption);
     data.files.forEach((file) => {
       const option = document.createElement("option");
       option.value = file;
@@ -50,8 +73,10 @@ const fetchContextFiles = async () => {
   }
 };
 
-const getSelectedContext = () =>
-  Array.from(contextSelect.selectedOptions).map((opt) => opt.value);
+const getSelectedContext = () => {
+  const value = contextSelect.value?.trim();
+  return value ? [value] : [];
+};
 
 const initSpeechRecognition = () => {
   const SpeechRecognition =
@@ -152,6 +177,8 @@ const sendRequest = async ({ audioBlob } = {}) => {
     schema: schemaSelect.value,
     contextFiles: getSelectedContext(),
     lintXml: lintXmlCheckbox.checked,
+    tcpHost: tcpHostInput.value.trim() || null,
+    tcpPort: tcpPortInput.value.trim() || null,
   };
 
   if (!payload.schema) {
@@ -220,6 +247,27 @@ sendBtn.addEventListener("click", () => sendRequest());
 micBtn.addEventListener("click", toggleDictation);
 recordBtn.addEventListener("click", async () => {
   await startRecording();
+});
+settingsBtn.addEventListener("click", (event) => {
+  event.stopPropagation();
+  toggleSettingsPanel();
+});
+document.addEventListener("click", (event) => {
+  if (settingsPanel.classList.contains("is-hidden")) {
+    return;
+  }
+  if (
+    settingsPanel.contains(event.target) ||
+    settingsBtn.contains(event.target)
+  ) {
+    return;
+  }
+  closeSettingsPanel();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeSettingsPanel();
+  }
 });
 
 fetchSchemas();

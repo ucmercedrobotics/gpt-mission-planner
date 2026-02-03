@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from mission_planner import MissionPlanner
+from network_interface import NetworkInterface
 from orchards.tree_placement_generator import TreePlacementGenerator
 
 load_dotenv()
@@ -36,6 +37,7 @@ BASE_DIR = Path(__file__).resolve().parent
 WEB_DIR = BASE_DIR / "web"
 SCHEMAS_DIR = BASE_DIR.parent / "schemas"
 CONTEXT_DIR = BASE_DIR / "resources" / "context"
+PROMPTS_DIR = CONTEXT_DIR / "prompts"
 
 config = "./app/config/localhost.yaml"
 with open(config, "r") as f:
@@ -198,15 +200,10 @@ async def health():
 @app.get("/context_files")
 async def get_context_files():
     try:
-        if not CONTEXT_DIR.exists():
+        if not PROMPTS_DIR.exists():
             return {"files": []}
 
-        files = [
-            str(p.relative_to(CONTEXT_DIR))
-            for p in CONTEXT_DIR.rglob("*")
-            if p.is_file()
-        ]
-        files.sort()
+        files = sorted({p.name for p in PROMPTS_DIR.rglob("*") if p.is_file()})
         return {"files": files}
     except Exception as e:
         logger.error(f"Error getting context files: {e}")
@@ -285,15 +282,34 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
                     requested_files = [requested_files]
 
                 for filename in requested_files:
-                    candidate_path = (CONTEXT_DIR / filename).resolve()
-                    if (
-                        candidate_path.exists()
-                        and candidate_path.is_file()
-                        and CONTEXT_DIR in candidate_path.parents
-                    ):
-                        context_files.append(str(candidate_path))
-                    else:
+                    if not filename:
+                        continue
+
+                    if "/" in filename or "\\" in filename:
+                        candidate_path = (CONTEXT_DIR / filename).resolve()
+                        if (
+                            candidate_path.exists()
+                            and candidate_path.is_file()
+                            and CONTEXT_DIR in candidate_path.parents
+                        ):
+                            context_files.append(str(candidate_path))
+                        else:
+                            logger.warning(
+                                f"Requested context file not found: {filename}"
+                            )
+                        continue
+
+                    matches = [p for p in PROMPTS_DIR.rglob(filename) if p.is_file()]
+                    if not matches:
                         logger.warning(f"Requested context file not found: {filename}")
+                        continue
+                    if len(matches) > 1:
+                        logger.warning(
+                            "Multiple context files matched %s. Using %s",
+                            filename,
+                            matches[0],
+                        )
+                    context_files.append(str(matches[0].resolve()))
 
             elif "context_files" in config_yaml:
                 context_files.extend(config_yaml["context_files"])
@@ -344,6 +360,22 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
         file_xml_out = mp.run(text)
         with open(file_xml_out, "r") as f:
             result = f.read()
+
+        try:
+            tcp_host = data.get("tcpHost") or config_yaml.get("host", "127.0.0.1")
+            tcp_port_raw = data.get("tcpPort") or config_yaml.get("port", 12345)
+            tcp_port = int(tcp_port_raw)
+            nic = NetworkInterface(logger, tcp_host, tcp_port)
+            nic.init_socket()
+            tree_points = (
+                mp.tree_points
+                if hasattr(mp, "tree_points") and mp.tree_points
+                else None
+            )
+            nic.send_file(file_xml_out, tree_points)
+            nic.close_socket()
+        except Exception as exc:
+            logger.warning("TCP send failed: %s", exc)
 
         log_entry["response"] = result
         os.makedirs("logs", exist_ok=True)

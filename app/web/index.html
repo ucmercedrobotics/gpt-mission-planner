@@ -8,27 +8,55 @@
   </head>
   <body>
     <div class="app">
-      <header>
-        <h1>GPT Mission Planner</h1>
-        <p class="subtitle">Web interface with speech input.</p>
+      <header class="app-header">
+        <div>
+          <h1>GPT Mission Planner</h1>
+          <p class="subtitle">Web interface with speech input.</p>
+        </div>
+        <div class="settings-wrapper">
+          <button
+            id="settingsBtn"
+            class="settings-button"
+            type="button"
+            aria-label="Open settings"
+            aria-expanded="false"
+          >
+            <svg
+              class="settings-icon"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                d="M19.14 12.94a7.41 7.41 0 0 0 .05-.94 7.41 7.41 0 0 0-.05-.94l2.11-1.64a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.6-.22l-2.49 1a7.28 7.28 0 0 0-1.63-.94l-.38-2.65a.5.5 0 0 0-.5-.42H9.23a.5.5 0 0 0-.5.42l-.38 2.65a7.28 7.28 0 0 0-1.63.94l-2.49-1a.5.5 0 0 0-.6.22l-2 3.46a.5.5 0 0 0 .12.64L4 11.06a7.41 7.41 0 0 0-.05.94c0 .32.02.63.05.94l-2.11 1.64a.5.5 0 0 0-.12.64l2 3.46a.5.5 0 0 0 .6.22l2.49-1c.5.38 1.05.7 1.63.94l.38 2.65a.5.5 0 0 0 .5.42h4.54a.5.5 0 0 0 .5-.42l.38-2.65c.58-.24 1.12-.56 1.63-.94l2.49 1a.5.5 0 0 0 .6-.22l2-3.46a.5.5 0 0 0-.12-.64Zm-7.14 2.56A3.5 3.5 0 1 1 15.5 12 3.5 3.5 0 0 1 12 15.5Z"
+              />
+            </svg>
+          </button>
+          <section id="settingsPanel" class="card settings-panel is-hidden" aria-label="Settings">
+            <div class="row">
+              <label for="schema">Schema</label>
+              <select id="schema"></select>
+            </div>
+            <div class="row">
+              <label for="context">Context files</label>
+              <select id="context"></select>
+            </div>
+            <div class="row">
+              <label>
+                <input type="checkbox" id="lintXml" checked />
+                Lint XML
+              </label>
+            </div>
+            <div class="row">
+              <label for="tcpHost">TCP host</label>
+              <input id="tcpHost" type="text" placeholder="127.0.0.1" />
+            </div>
+            <div class="row">
+              <label for="tcpPort">TCP port</label>
+              <input id="tcpPort" type="number" min="1" max="65535" placeholder="12345" />
+            </div>
+          </section>
+        </div>
       </header>
-
-      <section class="card">
-        <div class="row">
-          <label for="schema">Schema</label>
-          <select id="schema"></select>
-        </div>
-        <div class="row">
-          <label for="context">Context files</label>
-          <select id="context" multiple></select>
-        </div>
-        <div class="row">
-          <label>
-            <input type="checkbox" id="lintXml" checked />
-            Lint XML
-          </label>
-        </div>
-      </section>
 
       <section class="card">
         <div class="row">

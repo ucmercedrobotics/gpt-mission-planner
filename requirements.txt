@@ -15,5 +15,6 @@ openai==1.99.9
 fastapi
 uvicorn
 python-multipart
+faster-whisper==1.0.3
 # for testing
 pytest==9.0.2

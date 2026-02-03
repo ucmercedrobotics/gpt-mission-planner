@@ -10,7 +10,7 @@ schema:
   - "schemas/kinova_gen3_6dof.xsd"
 # NOTE: this is only for backwards compat when we change schema formats
 context_files:
-  - "app/resources/context/manipulators/kinova.txt"
+  - "app/resources/context/prompts/mission_planner/manipulators/kinova.txt"
 lint_xml: True
 # who to send this too?
 host: 127.0.0.1

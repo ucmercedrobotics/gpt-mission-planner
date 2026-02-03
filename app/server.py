@@ -10,7 +10,8 @@ import subprocess
 
 from pathlib import Path
 from fastapi import FastAPI, File, UploadFile, Form
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -31,6 +32,11 @@ port = int(os.getenv("PORT", 8002))
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+BASE_DIR = Path(__file__).resolve().parent
+WEB_DIR = BASE_DIR / "web"
+SCHEMAS_DIR = BASE_DIR.parent / "schemas"
+CONTEXT_DIR = BASE_DIR / "resources" / "context"
+
 config = "./app/config/localhost.yaml"
 with open(config, "r") as f:
     config_yaml = yaml.safe_load(f)
@@ -46,12 +52,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+if WEB_DIR.exists():
+    app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
+
 
 class GenerateRequest(BaseModel):
     text: str | None
 
 
 _openai_client = None
+_whisper_model = None
 
 CONTENT_TYPE_EXTENSION_MAP: dict[str, str] = {
     "audio/webm": ".webm",
@@ -115,41 +125,105 @@ def _convert_to_mp3(source_path: str) -> str:
     except FileNotFoundError as exc:
         logger.error("ffmpeg not found while converting audio: %s", exc)
         os.remove(mp3_path)
-        raise
+        return source_path
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr.decode("utf-8", errors="ignore") if exc.stderr else ""
         logger.error("ffmpeg conversion failed: %s", stderr.strip())
         os.remove(mp3_path)
-        raise
+        return source_path
 
     return mp3_path
 
 
 def transcribe(path: str) -> str:
+    provider = os.getenv("STT_PROVIDER", "openai").lower()
+    if provider == "local":
+        return transcribe_local(path)
+    return transcribe_openai(path)
+
+
+def transcribe_openai(path: str) -> str:
     global _openai_client
     if _openai_client is None:
         _openai_client = OpenAI()
     with open(path, "rb") as audio_file:
         transcript = _openai_client.audio.transcriptions.create(
-            model="gpt-4o-mini-transcribe",
+            model=os.getenv("STT_MODEL", "gpt-4o-mini-transcribe"),
             file=audio_file,
             prompt="The user is a farmer speaking instructions for an ag-tech robot.",
         )
-        return transcript
+        return transcript.text
+
+
+def transcribe_local(path: str) -> str:
+    global _whisper_model
+    try:
+        from faster_whisper import WhisperModel
+    except Exception as exc:
+        logger.error("faster-whisper not available: %s", exc)
+        raise
+
+    model_name = os.getenv("WHISPER_MODEL", "small")
+    device = os.getenv("WHISPER_DEVICE", "cpu")
+    compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
+
+    if _whisper_model is None:
+        _whisper_model = WhisperModel(
+            model_name,
+            device=device,
+            compute_type=compute_type,
+        )
+
+    segments, _info = _whisper_model.transcribe(path)
+    text = "".join(segment.text for segment in segments).strip()
+    return text
+
+
+@app.get("/")
+async def index():
+    index_path = WEB_DIR / "index.html"
+    if not index_path.exists():
+        return HTMLResponse(
+            "<h1>Missing web UI</h1><p>Expected app/web/index.html</p>",
+            status_code=404,
+        )
+    return HTMLResponse(index_path.read_text(encoding="utf-8"))
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 
 @app.get("/context_files")
 async def get_context_files():
     try:
-        path = Path("./app/resources/context/wheeled_bots")
-        if not path.exists():
+        if not CONTEXT_DIR.exists():
             return {"files": []}
 
-        files = [f.name for f in path.iterdir() if f.is_file()]
+        files = [
+            str(p.relative_to(CONTEXT_DIR))
+            for p in CONTEXT_DIR.rglob("*")
+            if p.is_file()
+        ]
+        files.sort()
         return {"files": files}
     except Exception as e:
         logger.error(f"Error getting context files: {e}")
         return {"files": []}
+
+
+@app.get("/schemas")
+async def get_schemas():
+    try:
+        if not SCHEMAS_DIR.exists():
+            return {"schemas": []}
+        schemas = [p.stem for p in SCHEMAS_DIR.glob("*.xsd") if p.is_file()]
+        schemas.sort()
+        return {"schemas": schemas}
+    except Exception as e:
+        logger.error(f"Error getting schemas: {e}")
+        return {"schemas": []}
 
 
 @app.post("/generate")
@@ -179,7 +253,7 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
                 finally:
                     if mp3_path != temp_path and os.path.exists(mp3_path):
                         os.remove(mp3_path)
-                yield json.dumps({"stt": transcript.text}) + "\n"
+                    yield json.dumps({"stt": transcript}) + "\n"
 
                 log_fname = f"{int(now)}_{Path(temp_path).name}"
                 log_path = Path("logs") / "audio" / log_fname
@@ -189,8 +263,12 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
 
-            text = transcript.text
+            text = transcript
             log_entry["audioFile"] = log_fname
+
+        if not text:
+            yield json.dumps({"error": "Missing text input"}) + "\n"
+            return
 
         context_files: list[str] = []
 
@@ -206,11 +284,14 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
                 if isinstance(requested_files, str):
                     requested_files = [requested_files]
 
-                wheeled_bots_path = Path("./app/resources/context/wheeled_bots")
                 for filename in requested_files:
-                    file_path = wheeled_bots_path / filename
-                    if file_path.exists() and file_path.is_file():
-                        context_files.append(str(file_path))
+                    candidate_path = (CONTEXT_DIR / filename).resolve()
+                    if (
+                        candidate_path.exists()
+                        and candidate_path.is_file()
+                        and CONTEXT_DIR in candidate_path.parents
+                    ):
+                        context_files.append(str(candidate_path))
                     else:
                         logger.warning(f"Requested context file not found: {filename}")
 

@@ -11,8 +11,8 @@ schema:
   - "schemas/kinova_gen3_6dof.xsd"
   - "schemas/clearpath_husky.xsd"
 context_files:
-  - "./app/resources/context/wheeled_bots/reza_medium.geojson"
-  # - "./app/resources/context/wheeled_bots/ucm_graph20_noreward.geojson"
+  - "./app/resources/context/sites/reza/geojson/reza_medium.geojson"
+  # - "./app/resources/context/sites/ucm/geojson/ucm_graph20_noreward.geojson"
 farm_polygon:
   top_left: [-120.42079453, 37.26643908]
   top_right: [-120.42012318, 37.26644777]
@@ -20,7 +20,6 @@ farm_polygon:
   bottom_left: [-120.42079999, 37.26578751]
   rows: 18
   cols: 8
-# who to send this too?
 host: 127.0.0.1
 port: 12346
 # LTL generation?

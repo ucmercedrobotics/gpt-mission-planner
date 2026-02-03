@@ -1,12 +1,13 @@
 IMAGE := ghcr.io/ucmercedrobotics/gpt-mission-planner
 WORKSPACE := gpt-mission-planner
 CONFIG := ./app/config/localhost.yaml
+PORT ?= 8002
 
 # set PLATFORM to linux/arm64 on silicon mac, otherwise linux/amd64
 ARCH := $(shell uname -m)
 PLATFORM := linux/amd64
-ENABLE_VERIFICATION ?= true
-BUILD_SPOT ?= false
+ENABLE_VERIFICATION ?= false
+BUILD_SPOT ?= true
 ifneq (,$(filter $(ARCH),arm64 aarch64))
 	PLATFORM := linux/arm64
 	ENABLE_VERIFICATION := false
@@ -48,4 +49,15 @@ server:
 
 # FIXME pythonpath
 serve:
-	PYTHONPATH=app uvicorn --host localhost --port 8003 app.server:app
+	docker run --rm \
+		--platform=$(PLATFORM) \
+		-v ./Makefile:/${WORKSPACE}/Makefile:Z \
+		-v ./app/:/${WORKSPACE}/app:Z \
+		-v ./schemas/:/${WORKSPACE}/schemas:Z \
+		--env-file .env \
+		-e PYTHONPATH=/${WORKSPACE}/app \
+		-e HOST=0.0.0.0 \
+		-e PORT=$(PORT) \
+		-p $(PORT):$(PORT) \
+		${IMAGE} \
+		uvicorn app.server:app --host 0.0.0.0 --port $(PORT)

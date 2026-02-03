@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GPT Mission Planner</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header>
+        <h1>GPT Mission Planner</h1>
+        <p class="subtitle">Web interface with speech input.</p>
+      </header>
+
+      <section class="card">
+        <div class="row">
+          <label for="schema">Schema</label>
+          <select id="schema"></select>
+        </div>
+        <div class="row">
+          <label for="context">Context files</label>
+          <select id="context" multiple></select>
+        </div>
+        <div class="row">
+          <label>
+            <input type="checkbox" id="lintXml" checked />
+            Lint XML
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="row">
+          <label for="prompt">Mission prompt</label>
+          <textarea id="prompt" rows="6" placeholder="Describe the mission..."></textarea>
+        </div>
+        <div class="actions">
+          <button id="micBtn" class="secondary">Start dictation</button>
+          <button id="recordBtn" class="secondary">Record & upload audio</button>
+          <button id="sendBtn" class="primary">Generate plan</button>
+        </div>
+        <div class="hint">
+          <strong>Tip:</strong> Browser dictation uses the Web Speech API (free). Audio upload uses server transcription.
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="row">
+          <label for="stt">Speech-to-text output</label>
+          <textarea id="stt" rows="4" readonly></textarea>
+        </div>
+        <div class="row">
+          <label for="result">Generated XML</label>
+          <textarea id="result" rows="14" readonly></textarea>
+        </div>
+      </section>
+
+      <footer>
+        <span id="status">Idle</span>
+      </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

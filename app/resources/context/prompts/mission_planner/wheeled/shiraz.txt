@@ -1,21 +1,29 @@
 FARM LAYOUT:
 Polygon corners (approximate GPS coordinates):
+    - lon: -121.1107158832017
+      lat: 37.353951452025434
+    - lon: -121.11058914882697
+      lat: 37.353951452025434
+    - lon: -121.1107158832017
+      lat: 37.35387256448231
+    - lon:  -121.11059048993147
+      lat: 37.353876295651744
 
-Top Left (NW) (tree 1): 37.26643908, -120.42079453
+Top Left (NW) (tree 1): 37.353951452025434, -121.1107158832017
 
-Top Right (NE) (tree 8): 37.26644777, -120.42012318
+Top Right (NE) (tree 3): 37.353951452025434, -121.11058914882697
 
-Bottom Left (SW) (tree 137): 37.26578751, -120.42079999
+Bottom Left (SW) (tree 10): 37.35387256448231, -121.1107158832017
 
-Bottom Right (SE) (tree 144): 37.26578860, -120.42011635
+Bottom Right (SE) (tree 12): 37.353876295651744, -121.11059048993147
 
 Grid size:
 
-8 trees per row
+3 trees per row
 
-18 trees per columns
+4 trees per columns
 
-Total trees: 18 × 8 = 144 trees
+Total trees: 4 × 3 = 12 trees
 
 RULES:
 

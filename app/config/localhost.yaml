@@ -12,39 +12,55 @@ schema:
 # NOTE: this is only for backwards compat when we change schema formats
 lint_xml: True
 context_files:
-  - "./app/resources/context/wheeled_bots/ucm_quad.txt"
-  # - "./app/resources/context/wheeled_bots/reza_medium_polygon.txt"
-  # - "./app/resources/context/wheeled_bots/greece.txt"
+  # - "./app/resources/context/prompts/mission_planner/wheeled/ucm_quad.txt"
+  # - "./app/resources/context/prompts/mission_planner/wheeled/reza_medium_polygon.txt"
+  # - "./app/resources/context/prompts/mission_planner/wheeled/greece.txt"
+  - "./app/resources/context/prompts/mission_planner/wheeled/shiraz.txt"
 farm_polygon:
   # QUAD
-  points:
-    # start from north west corner (as best as possible)
-    - lon: -120.423065
-      lat: 37.366449
-    - lon: -120.422867
-      lat: 37.366273
-    - lon: -120.423292
-      lat: 37.366288
-    - lon: -120.423083
-      lat: 37.366118
-  dimensions:
-    - row: 10
-      col: 5
+  # points:
+  #   # start from north west corner (as best as possible)
+  #   - lon: -120.423065
+  #     lat: 37.366449
+  #   - lon: -120.422867
+  #     lat: 37.366273
+  #   - lon: -120.423292
+  #     lat: 37.366288
+  #   - lon: -120.423083
+  #     lat: 37.366118
+  # dimensions:
+  #   - row: 10
+  #     col: 5
   # REZA MEDIUM POLYGON
   # points:
   #   # start from north west corner (as best as possible)
-  #   - lon: -120.42079453
-  #     lat: 37.26643908
-  #   - lon: -120.42012318
-  #     lat: 37.26644777
-  #   - lon: -120.42011635
-  #     lat: 37.26578860
-  #   - lon: -120.42079999
-  #     lat: 37.26578751
+  #   - lon: -120.42077086828617
+  #     lat: 37.266444065315824
+  #   - lon: -120.4201085438839
+  #     lat: 37.266442370268216
+  #   - lon: -120.4201114999999
+  #     lat: 37.26579179999999
+  #   - lon:  -120.4207689
+  #     lat: 37.265775999999995
   # dimensions:
   #   # draw this out from top (north) to bottom (south)
   #   - row: 18
   #     col: 8
+  # shiraz
+  points:
+    # start from north west corner (as best as possible)
+    - lon: -121.1107158832017
+      lat: 37.353951452025434
+    - lon: -121.11058914882697
+      lat: 37.353951452025434
+    - lon: -121.1107158832017
+      lat: 37.35387256448231
+    - lon:  -121.11059048993147
+      lat: 37.353876295651744
+  dimensions:
+    # draw this out from top (north) to bottom (south)
+    - row: 4
+      col: 3
 # who to send this too?
 host: 127.0.0.1
 port: 12346

@@ -1,7 +1,8 @@
 IMAGE := ghcr.io/ucmercedrobotics/gpt-mission-planner
 WORKSPACE := gpt-mission-planner
 CONFIG := ./app/config/localhost.yaml
-PORT ?= 8002
+WEB_PORT ?= 8002
+MISSION_PORT ?= 12346
 
 # set PLATFORM to linux/arm64 on silicon mac, otherwise linux/amd64
 ARCH := $(shell uname -m)
@@ -32,6 +33,7 @@ bash:
 		-v ./Makefile:/${WORKSPACE}/Makefile:Z \
 		-v ./app/:/${WORKSPACE}/app:Z \
 		-v ./schemas/:/${WORKSPACE}/schemas:Z \
+		-v ./logs:/${WORKSPACE}/logs:Z \
 		--env-file .env \
 		--net=host \
 		${IMAGE} \
@@ -54,10 +56,12 @@ serve:
 		-v ./Makefile:/${WORKSPACE}/Makefile:Z \
 		-v ./app/:/${WORKSPACE}/app:Z \
 		-v ./schemas/:/${WORKSPACE}/schemas:Z \
+		-v ./logs:/${WORKSPACE}/logs:Z \
 		--env-file .env \
 		-e PYTHONPATH=/${WORKSPACE}/app \
 		-e HOST=0.0.0.0 \
-		-e PORT=$(PORT) \
-		-p $(PORT):$(PORT) \
+		-e PORT=$(WEB_PORT) \
+		-p $(WEB_PORT):$(WEB_PORT) \
+		-p ${MISSION_PORT}:${MISSION_PORT}/udp \
 		${IMAGE} \
-		uvicorn app.server:app --host 0.0.0.0 --port $(PORT)
+		uvicorn app.server:app --host 0.0.0.0 --port $(WEB_PORT)

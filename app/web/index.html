@@ -4,84 +4,165 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>GPT Mission Planner</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
     <link rel="stylesheet" href="/static/style.css" />
   </head>
   <body>
+    <div id="map" aria-label="Interactive map background"></div>
     <div class="app">
-      <header class="app-header">
-        <div>
-          <h1>GPT Mission Planner</h1>
-          <p class="subtitle">Web interface with speech input.</p>
-        </div>
-        <div class="settings-wrapper">
-          <button
-            id="settingsBtn"
-            class="settings-button"
-            type="button"
-            aria-label="Open settings"
-            aria-expanded="false"
+      <div class="missions-wrapper">
+        <button
+          id="missionsBtn"
+          class="settings-button"
+          type="button"
+          aria-label="Open saved missions"
+          aria-expanded="false"
+        >
+          <svg class="settings-icon missions-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linejoin="round"
+            />
+            <path
+              d="M7 8.5c1.4 0 2.1 1.1 3.1 2.2s1.8 1.8 3.2 1.8 2.1-1.1 3.1-2.2"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+            />
+            <circle cx="7" cy="8.5" r="1" fill="currentColor" />
+            <path
+              d="M17 7.5c-1.4 0-2.6 1.1-2.6 2.6 0 1.9 2.6 4.4 2.6 4.4s2.6-2.5 2.6-4.4c0-1.5-1.1-2.6-2.6-2.6Z"
+              fill="currentColor"
+            />
+            <circle cx="17" cy="10" r="0.9" fill="#fff" />
+          </svg>
+        </button>
+        <section
+          id="missionsPanel"
+          class="card settings-panel is-hidden"
+          aria-label="Saved missions"
+          hidden
+        >
+          <div class="row">
+            <label for="savedMissions">Saved missions</label>
+            <select id="savedMissions"></select>
+            <div class="mission-actions">
+              <button id="loadSavedMission" class="secondary" type="button">
+                Load saved mission
+              </button>
+              <button id="sendSavedMission" class="secondary" type="button">
+                Send to robot
+              </button>
+              <button id="clearSavedMission" class="secondary" type="button">
+                Clear from cache
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+      <div class="settings-wrapper">
+        <button
+          id="settingsBtn"
+          class="settings-button"
+          type="button"
+          aria-label="Open settings"
+          aria-expanded="false"
+        >
+          <svg
+            class="settings-icon"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
           >
-            <svg
-              class="settings-icon"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <path
-                d="M19.14 12.94a7.41 7.41 0 0 0 .05-.94 7.41 7.41 0 0 0-.05-.94l2.11-1.64a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.6-.22l-2.49 1a7.28 7.28 0 0 0-1.63-.94l-.38-2.65a.5.5 0 0 0-.5-.42H9.23a.5.5 0 0 0-.5.42l-.38 2.65a7.28 7.28 0 0 0-1.63.94l-2.49-1a.5.5 0 0 0-.6.22l-2 3.46a.5.5 0 0 0 .12.64L4 11.06a7.41 7.41 0 0 0-.05.94c0 .32.02.63.05.94l-2.11 1.64a.5.5 0 0 0-.12.64l2 3.46a.5.5 0 0 0 .6.22l2.49-1c.5.38 1.05.7 1.63.94l.38 2.65a.5.5 0 0 0 .5.42h4.54a.5.5 0 0 0 .5-.42l.38-2.65c.58-.24 1.12-.56 1.63-.94l2.49 1a.5.5 0 0 0 .6-.22l2-3.46a.5.5 0 0 0-.12-.64Zm-7.14 2.56A3.5 3.5 0 1 1 15.5 12 3.5 3.5 0 0 1 12 15.5Z"
-              />
-            </svg>
-          </button>
-          <section id="settingsPanel" class="card settings-panel is-hidden" aria-label="Settings">
-            <div class="row">
-              <label for="schema">Schema</label>
-              <select id="schema"></select>
-            </div>
-            <div class="row">
-              <label for="context">Context files</label>
-              <select id="context"></select>
-            </div>
-            <div class="row">
-              <label>
-                <input type="checkbox" id="lintXml" checked />
-                Lint XML
-              </label>
-            </div>
-            <div class="row">
-              <label for="tcpHost">TCP host</label>
-              <input id="tcpHost" type="text" placeholder="127.0.0.1" />
-            </div>
-            <div class="row">
-              <label for="tcpPort">TCP port</label>
-              <input id="tcpPort" type="number" min="1" max="65535" placeholder="12345" />
-            </div>
-          </section>
-        </div>
-      </header>
+            <path
+              d="M19.14 12.94a7.41 7.41 0 0 0 .05-.94 7.41 7.41 0 0 0-.05-.94l2.11-1.64a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.6-.22l-2.49 1a7.28 7.28 0 0 0-1.63-.94l-.38-2.65a.5.5 0 0 0-.5-.42H9.23a.5.5 0 0 0-.5.42l-.38 2.65a7.28 7.28 0 0 0-1.63.94l-2.49-1a.5.5 0 0 0-.6.22l-2 3.46a.5.5 0 0 0 .12.64L4 11.06a7.41 7.41 0 0 0-.05.94c0 .32.02.63.05.94l-2.11 1.64a.5.5 0 0 0-.12.64l2 3.46a.5.5 0 0 0 .6.22l2.49-1c.5.38 1.05.7 1.63.94l.38 2.65a.5.5 0 0 0 .5.42h4.54a.5.5 0 0 0 .5-.42l.38-2.65c.58-.24 1.12-.56 1.63-.94l2.49 1a.5.5 0 0 0 .6-.22l2-3.46a.5.5 0 0 0-.12-.64Zm-7.14 2.56A3.5 3.5 0 1 1 15.5 12 3.5 3.5 0 0 1 12 15.5Z"
+            />
+          </svg>
+        </button>
+        <section id="settingsPanel" class="card settings-panel is-hidden" aria-label="Settings" hidden>
+          <div class="row">
+            <label for="schema">Schema</label>
+            <select id="schema"></select>
+          </div>
+          <div class="row">
+            <label for="context">Context files</label>
+            <select id="context"></select>
+          </div>
+          <div class="row">
+            <label>
+              <input type="checkbox" id="lintXml" checked />
+              Lint XML
+            </label>
+          </div>
+          <div class="row">
+            <label>
+              <input type="checkbox" id="saveMission" checked />
+              Save entire mission to logs
+            </label>
+          </div>
+          <div class="row">
+            <label for="tcpHost">TCP host</label>
+            <input id="tcpHost" type="text" placeholder="127.0.0.1" />
+          </div>
+          <div class="row">
+            <label for="tcpPort">TCP port</label>
+            <input id="tcpPort" type="number" min="1" max="65535" placeholder="12345" />
+          </div>
+          <div class="row">
+            <label>
+              <input type="checkbox" id="debugMode" />
+              Debug mode (show STT output)
+            </label>
+          </div>
+          <div class="row">
+            <button id="debugPolygonBtn" class="secondary" type="button">
+              Load debug polygon
+            </button>
+          </div>
+        </section>
+      </div>
 
       <section class="card">
         <div class="row">
           <label for="prompt">Mission prompt</label>
-          <textarea id="prompt" rows="6" placeholder="Describe the mission..."></textarea>
-        </div>
-        <div class="actions">
-          <button id="micBtn" class="secondary">Start dictation</button>
-          <button id="recordBtn" class="secondary">Record & upload audio</button>
-          <button id="sendBtn" class="primary">Generate plan</button>
+          <div class="prompt-row">
+            <textarea id="prompt" rows="1" placeholder="Describe the mission..."></textarea>
+            <button
+              id="micBtn"
+              class="secondary icon-button mic-idle"
+              type="button"
+              aria-label="Start recording"
+              aria-pressed="false"
+            >
+              <svg class="mic-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 14a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v4a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z" />
+              </svg>
+              <span class="record-dot" aria-hidden="true"></span>
+              <span class="spinner" aria-hidden="true"></span>
+            </button>
+          </div>
         </div>
         <div class="hint">
           <strong>Tip:</strong> Browser dictation uses the Web Speech API (free). Audio upload uses server transcription.
         </div>
       </section>
 
-      <section class="card">
-        <div class="row">
-          <label for="stt">Speech-to-text output</label>
-          <textarea id="stt" rows="4" readonly></textarea>
-        </div>
-        <div class="row">
-          <label for="result">Generated XML</label>
-          <textarea id="result" rows="14" readonly></textarea>
-        </div>
+      <section id="debugCard" class="card is-hidden" hidden>
+        <template id="sttTemplate">
+          <div class="row">
+            <label for="stt">Speech-to-text output</label>
+            <textarea id="stt" rows="4" readonly></textarea>
+          </div>
+        </template>
+        <div id="sttContainer"></div>
       </section>
 
       <footer>
@@ -89,6 +170,21 @@
       </footer>
     </div>
 
+    <section id="xmlToast" class="toast is-hidden" role="dialog" aria-label="Generated XML" hidden>
+      <div class="toast-header">
+        <strong>Generated XML</strong>
+        <button id="xmlToastClose" class="toast-close" type="button" aria-label="Close generated XML">
+          ×
+        </button>
+      </div>
+      <textarea id="result" rows="14" readonly></textarea>
+    </section>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
     <script src="/static/app.js"></script>
   </body>
 </html>

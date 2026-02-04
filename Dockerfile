@@ -39,7 +39,7 @@ RUN set -e; if test "$ENABLE_VERIFICATION" = true; then \
 fi
 
 RUN apt -y update && DEBIAN_FRONTEND=noninteractive apt install -y \
-  software-properties-common build-essential wget netcat-openbsd vim
+  software-properties-common build-essential wget netcat-openbsd vim ffmpeg
 
 # SPOT package is installed into python3 folder, not python3.11
 ENV PYTHONPATH="/usr/lib/python3/dist-packages"

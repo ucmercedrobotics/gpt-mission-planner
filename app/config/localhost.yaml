@@ -61,8 +61,7 @@ farm_polygon:
   #   # draw this out from top (north) to bottom (south)
   #   - row: 4
   #     col: 3
-# who to send this too?
-host: 127.0.0.1
+host: 172.17.0.1
 port: 12346
 # LTL generation?
 ltl: False

@@ -25,43 +25,46 @@ ANTHROPIC_API_KEY=<my_token_here>
 On ARM Macs, SPOT will be built from source. If necessary, you can force building SPOT from source on x86/64 by running `make build-image BUILD_SPOT=true`.
 
 ```bash
-$ make build-image
+make build-image
 ```
 
 ```bash
-$ make bash
+make bash
 ```
 
 The above two commands will start the build and bash process of the Docker environment to execute your GPT Mission Planner.
 
 ### Example Execution:
 ```bash
-$ make build-image
-docker build . -t gpt-mission-planner --target local
+make build-image
 ...
 
-$ make bash
-docker run -it --rm \
-        -v ./Makefile:/gpt-mission-planner/Makefile:Z \
-        -v ./app/:/gpt-mission-planner/app:Z \
-        --env-file .env \
-        --net=host \
-        gpt-mission-planner \
-        /bin/bash
-root@linuxkit-965cbccc7c1e:/gpt-mission-planner#
+make bash
+make run
 ```
 
 ```bash
 ```bash
-$ make server
-nc -l 0.0.0.0 12346
+make server
 ```
-In another shell:
+
+### Web UI (Local)
+Run the web interface in Docker (default http://localhost:8002):
+
 ```bash
-root@linuxkit-965cbccc7c1e:/gpt-mission-planner# make run
-python3 ./app/mission_planner.py
-Enter the specifications for your mission plan: Take a thermal picture of every other tree on the farm.
-INFO:root:Successful XML mission plan generation...
+make serve
+```
+
+If you want a different port:
+
+```bash
+WEB_PORT=8080 make serve
+```
+
+To test mission delivery locally, open another terminal and listen on the mission port (default 12346):
+
+```bash
+make server
 ```
 
 ### TCP Message Format
@@ -79,12 +82,9 @@ Notes:
 - The receiver detects absence of JSON by `recv` returning empty when attempting the next 4-byte length.
 - JSON is UTF-8; XML is sent as raw bytes.
 
-### Graphical UI
-A web+mobile app implementation of this program is under development at https://github.com/thomasm6m6/mpui/.
-
 ## Test
 ```bash
-$ python -m pytest test/ -v
+python -m pytest test/ -v
 ...
 test/test_network_interface.py::test_send_xml_only PASSED [25%]
 test/test_network_interface.py::test_send_xml_and_tree_points PASSED [50%]
@@ -101,3 +101,16 @@ The following queries are used to demonstrate the capabilities of this system:
 ![Implict queries](docs/images/implicit.png)
 
 ![Farmer queries](docs/images/farmer.png)
+
+## Citation
+If you use this work, please cite:
+
+```latex
+@inproceedings{zuzuarregui_carpin_2025,
+	author    = {M. A. Zuzu\'{a}rregui and S. Carpin},
+	title     = {Leveraging LLMs for Mission Planning in Precision Agriculture},
+	booktitle = {Proceedings of the IEEE International Conference on Robotics and Automation},
+	pages     = {7146--7152},
+	year      = {2025}
+}
+```

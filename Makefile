@@ -35,7 +35,6 @@ bash:
 		-v ./schemas/:/${WORKSPACE}/schemas:Z \
 		-v ./logs:/${WORKSPACE}/logs:Z \
 		--env-file .env \
-		--net=host \
 		${IMAGE} \
 		/bin/bash
 
@@ -47,7 +46,7 @@ run:
 	python3 ./app/cli.py --config ${CONFIG}
 
 server:
-	nc -lk 0.0.0.0 12346 > test.bin
+	nc -lk 172.17.0.1 12346 > test.bin
 
 # FIXME pythonpath
 serve:
@@ -59,8 +58,6 @@ serve:
 		-v ./logs:/${WORKSPACE}/logs:Z \
 		--env-file .env \
 		-e PYTHONPATH=/${WORKSPACE}/app \
-		-e HOST=0.0.0.0 \
-		-e PORT=$(WEB_PORT) \
 		-p $(WEB_PORT):$(WEB_PORT) \
 		-p ${MISSION_PORT}:${MISSION_PORT}/udp \
 		${IMAGE} \

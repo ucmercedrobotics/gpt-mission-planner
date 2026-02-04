@@ -13,7 +13,7 @@ context_files:
   - "app/resources/context/prompts/mission_planner/manipulators/kinova.txt"
 lint_xml: True
 # who to send this too?
-host: 127.0.0.1
+host: 172.17.0.1
 port: 12346
 # LTL generation?
 ltl: False

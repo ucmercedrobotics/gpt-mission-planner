@@ -23,7 +23,7 @@ farm_polygon:
   rows: 18
   cols: 8
 # who to send this to?
-host: 127.0.0.1
+host: 172.17.0.1
 port: 12346
 # LTL generation?
 ltl: true

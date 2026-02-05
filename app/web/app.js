@@ -338,6 +338,42 @@ const loadSavedMissions = () => {
   }
 };
 
+const mergeMissionLists = (existing, incoming) => {
+  const merged = new Map();
+  existing.forEach((mission) => {
+    if (mission && mission.id) {
+      merged.set(mission.id, { ...mission });
+    }
+  });
+  incoming.forEach((mission) => {
+    if (!mission || !mission.id) return;
+    const current = merged.get(mission.id);
+    if (!current || (mission.createdAt || 0) >= (current.createdAt || 0)) {
+      merged.set(mission.id, { ...current, ...mission });
+      return;
+    }
+    merged.set(mission.id, { ...mission, ...current });
+  });
+  return Array.from(merged.values()).sort(
+    (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
+  );
+};
+
+const hydrateSavedMissionsFromServer = async () => {
+  try {
+    const res = await fetch("/missions");
+    if (!res.ok) return;
+    const payload = await res.json();
+    const missions = Array.isArray(payload.missions) ? payload.missions : [];
+    if (!missions.length) return;
+    const merged = mergeMissionLists(loadSavedMissions(), missions).slice(0, 25);
+    localStorage.setItem(savedMissionKey, JSON.stringify(merged));
+    populateSavedMissions();
+  } catch (err) {
+    // Ignore hydration errors to avoid breaking the UI.
+  }
+};
+
 const saveMissionToStorage = (mission) => {
   if (!mission || !mission.id) return;
   const missions = loadSavedMissions();
@@ -806,5 +842,6 @@ fetchContextFiles();
 fetchTcpDefaults();
 initLeafletMap();
 window.addEventListener("resize", scheduleFitToLastBounds);
+hydrateSavedMissionsFromServer();
 populateSavedMissions();
 setStatus("Ready");

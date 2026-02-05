@@ -535,6 +535,9 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
             yield json.dumps({"error": "Missing text input"}) + "\n"
             return
 
+        if text:
+            data["text"] = text
+
         context_files: list[str] = []
 
         # don't generate/check LTL by default

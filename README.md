@@ -13,52 +13,37 @@
 ## How To Run GPT Mission Planner
 https://github.com/user-attachments/assets/cd18a3b1-1cd3-48e9-ae74-825cca88b508
 
-### GPT Token
+### ENV Variables
 Create a `.env` file and add your API tokens:
 ```bash
 OPENAI_API_KEY=<my_token_here>
 ANTHROPIC_API_KEY=<my_token_here>
 ```
+By default, XML planning uses OpenAI and is the only key required.
+If using formal verification, add an Anthropic key.
 
-### Docker
-
-On ARM Macs, SPOT will be built from source. If necessary, you can force building SPOT from source on x86/64 by running `make build-image BUILD_SPOT=true`.
-
+You may also configure the speech-to-text models if you wish.
+Below are what you should place as default defaults:
 ```bash
-make build-image
+STT_PROVIDER=local
+WHISPER_MODEL=small
+WHISPER_DEVICE=cpu
+WHISPER_COMPUTE_TYPE=int8
 ```
 
-```bash
-make bash
-```
-
-The above two commands will start the build and bash process of the Docker environment to execute your GPT Mission Planner.
-
-### Example Execution:
-```bash
-make build-image
-...
-
-make bash
-make run
-```
-
-```bash
-```bash
-make server
-```
+Save this `.env` file in your workspace for the next series of commands.
 
 ### Web UI (Local)
 Run the web interface in Docker (default http://localhost:8002):
 
 ```bash
-make serve
+make prod
 ```
 
 If you want a different port:
 
 ```bash
-WEB_PORT=8080 make serve
+WEB_PORT=8080 make prod
 ```
 
 To test mission delivery locally, open another terminal and listen on the mission port (default 12346):
@@ -66,8 +51,34 @@ To test mission delivery locally, open another terminal and listen on the missio
 ```bash
 make server
 ```
+The above will create you a binary file called `test.bin` that you can inspect for the relevant XML mission with JSON orchard map (if necessary).
+Ideally, you should connect the webapp to a robot through the GUI.
+The above command is simply to debug your output and confirm it's coming through properly.
+The options to do so are provided in the settings.
 
-### TCP Message Format
+### Developers
+
+If you wish to use the text-based planner without the web UI:
+```bash
+make build-image
+make bash
+```
+
+From within the container you can run the text-based planner:
+```bash
+make run
+```
+or selecting your own config:
+```bash
+CONFIG=<path_to_config>.yaml make run
+```
+
+Or you can even just run the webapp manually:
+```bash
+make serve
+```
+
+## TCP Message Format
 The output of this planner is as follows:
 
 | Order | Field | Type/Size | Description |

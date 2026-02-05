@@ -1,5 +1,5 @@
 ARG PYTHON_IMAGE=python:3.11-bookworm
-ARG ENABLE_VERIFICATION=true
+ARG ENABLE_VERIFICATION=false
 ARG BUILD_SPOT=false
 ARG SPOT_VERSION=2.13.1
 ARG SPIN_VERSION=6.5.2
@@ -39,36 +39,21 @@ RUN set -e; if test "$ENABLE_VERIFICATION" = true; then \
 fi
 
 RUN apt -y update && DEBIAN_FRONTEND=noninteractive apt install -y \
-  software-properties-common build-essential wget netcat-openbsd vim
+  software-properties-common build-essential wget netcat-openbsd vim ffmpeg
 
-# SPOT package is installed into python3 folder, not python3.11
-ENV PYTHONPATH="/usr/lib/python3/dist-packages"
-
-# For more information, please refer to https://aka.ms/vscode-docker-python
-# This is particularly for debugging using VSCode
-FROM builder AS dev
-
-WORKDIR /gpt-mission-planner
-COPY . /gpt-mission-planner
-
-# Keeps Python from generating .pyc files in the container
-ENV PYTHONDONTWRITEBYTECODE=1
-
-# Turns off buffering for easier container logging
-ENV PYTHONUNBUFFERED=1
-
-# Creates a non-root user with an explicit UID and adds permission to access the /app folder
-# For more info, please refer to https://aka.ms/vscode-docker-python-configure-containers
-RUN adduser -u 5678 --disabled-password --gecos "" appuser && chown -R appuser /gpt-mission-planner
-USER appuser
-
-# During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug
-# CMD ["python", "orienteering/orienteering.py"]
-
-# image for running with a GPU: LINUX ONLY
-FROM base AS local
-
-# copy over all python files from builder stage and add location to path
 COPY --from=builder /usr/local /usr/local
 
+# SPOT package is installed into python3 folder, not python3.11
+ENV PYTHONPATH="/usr/lib/python3/dist-packages:/gpt-mission-planner/app"
+
 WORKDIR /gpt-mission-planner
+
+FROM base AS prod
+
+COPY ./Makefile /gpt-mission-planner/Makefile
+COPY ./app /gpt-mission-planner/app
+COPY ./schemas /gpt-mission-planner/schemas
+
+EXPOSE 8002
+
+CMD ["uvicorn", "app.server:app", "--host", "0.0.0.0", "--port", "8002"]

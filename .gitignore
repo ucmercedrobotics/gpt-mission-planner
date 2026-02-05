@@ -22,3 +22,4 @@ app/gpt_outputs/
 # visualizing aut files
 out.html
 .env
+logs/

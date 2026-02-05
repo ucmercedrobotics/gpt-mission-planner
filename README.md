@@ -13,58 +13,72 @@
 ## How To Run GPT Mission Planner
 https://github.com/user-attachments/assets/cd18a3b1-1cd3-48e9-ae74-825cca88b508
 
-### GPT Token
+### ENV Variables
 Create a `.env` file and add your API tokens:
 ```bash
 OPENAI_API_KEY=<my_token_here>
 ANTHROPIC_API_KEY=<my_token_here>
 ```
+By default, XML planning uses OpenAI and is the only key required.
+If using formal verification, add an Anthropic key.
 
-### Docker
-
-On ARM Macs, SPOT will be built from source. If necessary, you can force building SPOT from source on x86/64 by running `make build-image BUILD_SPOT=true`.
-
+You may also configure the speech-to-text models if you wish.
+Below are what you should place as default defaults:
 ```bash
-$ make build-image
+STT_PROVIDER=local
+WHISPER_MODEL=small
+WHISPER_DEVICE=cpu
+WHISPER_COMPUTE_TYPE=int8
 ```
 
+Save this `.env` file in your workspace for the next series of commands.
+
+### Web UI (Local)
+Run the web interface in Docker (default http://localhost:8002):
+
 ```bash
-$ make bash
+make prod
 ```
 
-The above two commands will start the build and bash process of the Docker environment to execute your GPT Mission Planner.
+If you want a different port:
 
-### Example Execution:
 ```bash
-$ make build-image
-docker build . -t gpt-mission-planner --target local
-...
-
-$ make bash
-docker run -it --rm \
-        -v ./Makefile:/gpt-mission-planner/Makefile:Z \
-        -v ./app/:/gpt-mission-planner/app:Z \
-        --env-file .env \
-        --net=host \
-        gpt-mission-planner \
-        /bin/bash
-root@linuxkit-965cbccc7c1e:/gpt-mission-planner#
+WEB_PORT=8080 make prod
 ```
 
+To test mission delivery locally, open another terminal and listen on the mission port (default 12346):
+
 ```bash
-```bash
-$ make server
-nc -l 0.0.0.0 12346
+make server
 ```
-In another shell:
+The above will create you a binary file called `test.bin` that you can inspect for the relevant XML mission with JSON orchard map (if necessary).
+Ideally, you should connect the webapp to a robot through the GUI.
+The above command is simply to debug your output and confirm it's coming through properly.
+The options to do so are provided in the settings.
+
+### Developers
+
+If you wish to use the text-based planner without the web UI:
 ```bash
-root@linuxkit-965cbccc7c1e:/gpt-mission-planner# make run
-python3 ./app/mission_planner.py
-Enter the specifications for your mission plan: Take a thermal picture of every other tree on the farm.
-INFO:root:Successful XML mission plan generation...
+make build-image
+make bash
 ```
 
-### TCP Message Format
+From within the container you can run the text-based planner:
+```bash
+make run
+```
+or selecting your own config:
+```bash
+CONFIG=<path_to_config>.yaml make run
+```
+
+Or you can even just run the webapp manually:
+```bash
+make serve
+```
+
+## TCP Message Format
 The output of this planner is as follows:
 
 | Order | Field | Type/Size | Description |
@@ -79,12 +93,9 @@ Notes:
 - The receiver detects absence of JSON by `recv` returning empty when attempting the next 4-byte length.
 - JSON is UTF-8; XML is sent as raw bytes.
 
-### Graphical UI
-A web+mobile app implementation of this program is under development at https://github.com/thomasm6m6/mpui/.
-
 ## Test
 ```bash
-$ python -m pytest test/ -v
+python -m pytest test/ -v
 ...
 test/test_network_interface.py::test_send_xml_only PASSED [25%]
 test/test_network_interface.py::test_send_xml_and_tree_points PASSED [50%]
@@ -101,3 +112,16 @@ The following queries are used to demonstrate the capabilities of this system:
 ![Implict queries](docs/images/implicit.png)
 
 ![Farmer queries](docs/images/farmer.png)
+
+## Citation
+If you use this work, please cite:
+
+```latex
+@inproceedings{zuzuarregui_carpin_2025,
+	author    = {M. A. Zuzu\'{a}rregui and S. Carpin},
+	title     = {Leveraging LLMs for Mission Planning in Precision Agriculture},
+	booktitle = {Proceedings of the IEEE International Conference on Robotics and Automation},
+	pages     = {7146--7152},
+	year      = {2025}
+}
+```

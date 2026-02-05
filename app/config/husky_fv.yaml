@@ -12,9 +12,9 @@ log_directory: "./app/gpt_outputs/iros_experiments/4o"
 schema:
   - "schemas/clearpath_husky.xsd"
 context_files:
-  - "./app/resources/context/wheeled_bots/reza_small.geojson"
-  # - "./app/resources/context/wheeled_bots/reza_medium.geojson"
-  # - "app/resources/context/wheeled_bots/ucm_graph20.geojson"
+  - "./app/resources/context/sites/reza/geojson/reza_small.geojson"
+  # - "./app/resources/context/sites/reza/geojson/reza_medium.geojson"
+  # - "app/resources/context/sites/ucm/geojson/ucm_graph20.geojson"
 farm_polygon:
   top_left: [-120.42079453, 37.26643908]
   top_right: [-120.42012318, 37.26644777]
@@ -23,7 +23,7 @@ farm_polygon:
   rows: 18
   cols: 8
 # who to send this to?
-host: 127.0.0.1
+host: 172.17.0.1
 port: 12346
 # LTL generation?
 ltl: true

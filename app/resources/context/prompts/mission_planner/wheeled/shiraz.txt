@@ -1,13 +1,4 @@
 FARM LAYOUT:
-Polygon corners (approximate GPS coordinates):
-    - lon: -121.1107158832017
-      lat: 37.353951452025434
-    - lon: -121.11058914882697
-      lat: 37.353951452025434
-    - lon: -121.1107158832017
-      lat: 37.35387256448231
-    - lon:  -121.11059048993147
-      lat: 37.353876295651744
 
 Top Left (NW) (tree 1): 37.353951452025434, -121.1107158832017
 
@@ -23,14 +14,12 @@ Grid size:
 
 4 trees per columns
 
-Total trees: 4 × 3 = 12 trees
+Total trees: 3 × 4 = 12 trees
 
 RULES:
-
-Numbering: ONE-BASED INDEXING NOT ZERO INDEX, ordered left-to-right, top-to-bottom (like reading a book) for all trees. i.e tree 1 is row 1, column 1.
-Tasks should almost always require driving to a tree and then doing an action unless doing multiple actions at the same tree.
-
-You cannot drive through columns of trees!
-If you require to move between columns to sample a tree you must also include intermediate trees that get you out and in columns (first or last row).
+- Numbering: left-to-right, top-to-bottom
+- You cannot drive through columns of trees
+- If moving between columns, move to the first/last row trees to exit the current column and enter the target column
+- Always plan the full path including intermediate trees
 
 USE THIS INFORMATION TO CREATE THE XML MISSION.

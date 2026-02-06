@@ -48,6 +48,10 @@ config = "./app/config/localhost.yaml"
 with open(config, "r") as f:
     config_yaml = yaml.safe_load(f)
 
+logging_level = config_yaml.get("logging", "INFO")
+logging.getLogger().setLevel(logging._nameToLevel.get(logging_level, logging.INFO))
+logger.setLevel(logging._nameToLevel.get(logging_level, logging.INFO))
+
 app = FastAPI()
 
 # Add CORS middleware
@@ -477,6 +481,41 @@ def send_mission(
         result = f.read()
 
     return {"result": result, "sent": True}
+
+
+@app.post("/missions/delete")
+def delete_missions(payload: dict = Body(default={})):  # type: ignore
+    mission_ids = payload.get("ids") if isinstance(payload, dict) else None
+    if not isinstance(mission_ids, list) or not mission_ids:
+        return {"error": "Missing mission ids"}
+
+    mission_dir = Path("logs") / "missions"
+    deleted = []
+    missing = []
+
+    for mission_id in mission_ids:
+        if not isinstance(mission_id, str) or not mission_id.strip():
+            continue
+        mission_id = mission_id.strip()
+        files = [
+            mission_dir / f"{mission_id}_request.json",
+            mission_dir / f"{mission_id}_result.xml",
+            mission_dir / f"{mission_id}_tree_points.json",
+        ]
+        removed_any = False
+        for file_path in files:
+            try:
+                if file_path.exists():
+                    file_path.unlink()
+                    removed_any = True
+            except Exception as exc:
+                logger.warning("Failed deleting %s: %s", file_path, exc)
+        if removed_any:
+            deleted.append(mission_id)
+        else:
+            missing.append(mission_id)
+
+    return {"deleted": deleted, "missing": missing}
 
 
 @app.post("/generate")

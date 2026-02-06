@@ -23,17 +23,14 @@ class TreePlacementGenerator:
         polygon_coords: list,
         dimensions: list,
         epsg: int = CoordinateSystem.UTMZ10N,
-        tolerance_pct: float = 0.001,
     ) -> None:
         """
         Initialize the tree placement generator.
 
         Args:
             epsg: EPSG code for UTM projection
-            tolerance_pct: Tolerance buffer as percentage of polygon height (default: 1%)
         """
         self.coord_system = CoordinateSystem(epsg)
-        self.tolerance_pct = tolerance_pct
         self.polygon_coords = self._make_polygon_array(polygon_coords)
         self.dimensions = self._make_dimension_array(dimensions)
 

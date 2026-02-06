@@ -27,6 +27,7 @@ const savedMissionsSelect = document.getElementById("savedMissions");
 const loadSavedMissionBtn = document.getElementById("loadSavedMission");
 const sendSavedMissionBtn = document.getElementById("sendSavedMission");
 const clearSavedMissionBtn = document.getElementById("clearSavedMission");
+const clearAllMissionsBtn = document.getElementById("clearAllMissions");
 
 let recording = false;
 let mediaRecorder = null;
@@ -256,10 +257,22 @@ const loadDebugPolygon = async () => {
   }
 };
 
+const getSelectedMissionIds = () => {
+  if (!savedMissionsSelect) return [];
+  return Array.from(savedMissionsSelect.selectedOptions)
+    .map((option) => option.value)
+    .filter(Boolean);
+};
+
 const loadSavedMission = async () => {
   if (!savedMissionsSelect) return;
-  const missionId = savedMissionsSelect.value;
-  if (!missionId) return;
+  const missionIds = getSelectedMissionIds();
+  if (!missionIds.length) return;
+  if (missionIds.length > 1) {
+    setStatus("Select a single mission to load");
+    return;
+  }
+  const missionId = missionIds[0];
   setStatus("Loading saved mission...");
   try {
     const res = await fetch(`/missions/${encodeURIComponent(missionId)}`);
@@ -289,8 +302,13 @@ const loadSavedMission = async () => {
 
 const sendSavedMission = async () => {
   if (!savedMissionsSelect) return;
-  const missionId = savedMissionsSelect.value;
-  if (!missionId) return;
+  const missionIds = getSelectedMissionIds();
+  if (!missionIds.length) return;
+  if (missionIds.length > 1) {
+    setStatus("Select a single mission to send");
+    return;
+  }
+  const missionId = missionIds[0];
   setStatus("Sending saved mission...");
   try {
     const res = await fetch(`/missions/${encodeURIComponent(missionId)}/send`, {
@@ -336,6 +354,18 @@ const loadSavedMissions = () => {
   } catch (err) {
     return [];
   }
+};
+
+const selectSavedMissions = (ids) => {
+  if (!savedMissionsSelect) return;
+  const idSet = new Set((ids || []).filter(Boolean));
+  Array.from(savedMissionsSelect.options).forEach((option) => {
+    if (!option.value) {
+      option.selected = false;
+      return;
+    }
+    option.selected = idSet.has(option.value);
+  });
 };
 
 const mergeMissionLists = (existing, incoming) => {
@@ -387,14 +417,71 @@ const saveMissionToStorage = (mission) => {
   localStorage.setItem(savedMissionKey, JSON.stringify(trimmed));
 };
 
-const clearSavedMission = () => {
+const clearSavedMission = async () => {
   if (!savedMissionsSelect) return;
-  const missionId = savedMissionsSelect.value;
-  if (!missionId) return;
-  const missions = loadSavedMissions().filter((item) => item.id !== missionId);
-  localStorage.setItem(savedMissionKey, JSON.stringify(missions));
-  populateSavedMissions();
-  setStatus("Saved mission cleared");
+  const missionIds = getSelectedMissionIds();
+  if (!missionIds.length) return;
+  setStatus("Clearing saved missions...");
+  try {
+    const res = await fetch("/missions/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: missionIds }),
+    });
+    if (!res.ok) {
+      setStatus("Failed to clear saved missions");
+      return;
+    }
+    const payload = await res.json();
+    if (payload.error) {
+      setStatus(payload.error);
+      return;
+    }
+    const removed = new Set([...(payload.deleted || []), ...(payload.missing || [])]);
+    const missions = loadSavedMissions().filter((item) => !removed.has(item.id));
+    localStorage.setItem(savedMissionKey, JSON.stringify(missions));
+    populateSavedMissions();
+    const removedCount = removed.size;
+    setStatus(
+      `Cleared ${removedCount} saved mission${removedCount === 1 ? "" : "s"}`
+    );
+  } catch (err) {
+    setStatus("Failed to clear saved missions");
+  }
+};
+
+const clearAllMissions = async () => {
+  if (!savedMissionsSelect) return;
+  const missions = loadSavedMissions();
+  if (!missions.length) return;
+  const confirmed = window.confirm(
+    "Clear all saved missions? This will remove them from the server logs."
+  );
+  if (!confirmed) return;
+  const missionIds = missions.map((mission) => mission.id).filter(Boolean);
+  if (!missionIds.length) return;
+  setStatus("Clearing all saved missions...");
+  try {
+    const res = await fetch("/missions/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: missionIds }),
+    });
+    if (!res.ok) {
+      setStatus("Failed to clear saved missions");
+      return;
+    }
+    const payload = await res.json();
+    if (payload.error) {
+      setStatus(payload.error);
+      return;
+    }
+    localStorage.setItem(savedMissionKey, JSON.stringify([]));
+    populateSavedMissions();
+    setStatus("Cleared all saved missions");
+  } catch (err) {
+    setStatus("Failed to clear saved missions");
+  }
 };
 
 const populateSavedMissions = () => {
@@ -501,6 +588,18 @@ const setMicState = (state) => {
   micBtn.classList.remove("mic-idle", "mic-recording", "mic-loading");
   if (state) {
     micBtn.classList.add(state);
+  }
+};
+
+const hasPromptText = () => Boolean(promptInput && promptInput.value.trim());
+
+const updateMicButtonMode = () => {
+  if (!micBtn) return;
+  const hasText = hasPromptText();
+  micBtn.classList.toggle("has-text", hasText);
+  micBtn.setAttribute("aria-label", hasText ? "Send mission" : "Start recording");
+  if (!recording) {
+    micBtn.setAttribute("aria-pressed", "false");
   }
 };
 
@@ -647,12 +746,16 @@ const sendRequest = async ({ audioBlob, includeText = true } = {}) => {
   const payload = {
     text: includeText && promptInput ? promptInput.value.trim() || null : null,
     schema: schemaSelect ? schemaSelect.value : null,
-    contextFiles: getSelectedContext(),
     lintXml: lintXmlCheckbox ? lintXmlCheckbox.checked : true,
     saveMission: saveMissionCheckbox ? saveMissionCheckbox.checked : true,
     tcpHost: tcpHostInput ? tcpHostInput.value.trim() || null : null,
     tcpPort: tcpPortInput ? tcpPortInput.value.trim() || null : null,
   };
+
+  const selectedContext = getSelectedContext();
+  if (selectedContext.length) {
+    payload.contextFiles = selectedContext;
+  }
 
   if (!payload.schema) {
     setStatus("Please select a schema");
@@ -702,6 +805,8 @@ const sendRequest = async ({ audioBlob, includeText = true } = {}) => {
           if (sttOutput) sttOutput.value = message.stt;
           if (!payload.text && promptInput) {
             promptInput.value = message.stt;
+            autoGrowPrompt();
+            updateMicButtonMode();
           }
         }
         if (message.error) {
@@ -716,6 +821,7 @@ const sendRequest = async ({ audioBlob, includeText = true } = {}) => {
         if (message.mission) {
           saveMissionToStorage(message.mission);
           populateSavedMissions();
+          selectSavedMissions([message.mission.id]);
         }
         if (message.treePoints) {
           drawGpsHull(message.treePoints);
@@ -739,6 +845,11 @@ if (micBtn) {
       if (mediaRecorder) {
         mediaRecorder.stop();
       }
+      return;
+    }
+    if (hasPromptText()) {
+      setMicState("mic-loading");
+      await sendRequest();
       return;
     }
     await startRecording();
@@ -806,8 +917,20 @@ if (xmlToastClose) {
 }
 
 if (promptInput) {
-  promptInput.addEventListener("input", autoGrowPrompt);
+  promptInput.addEventListener("input", () => {
+    autoGrowPrompt();
+    updateMicButtonMode();
+  });
+  promptInput.addEventListener("keydown", async (event) => {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    if (event.isComposing) return;
+    event.preventDefault();
+    if (!hasPromptText() || recording) return;
+    setMicState("mic-loading");
+    await sendRequest();
+  });
   autoGrowPrompt();
+  updateMicButtonMode();
 }
 if (debugModeCheckbox) {
   setDebugVisibility(debugModeCheckbox.checked);
@@ -835,6 +958,11 @@ if (sendSavedMissionBtn) {
 if (clearSavedMissionBtn) {
   clearSavedMissionBtn.addEventListener("click", () => {
     clearSavedMission();
+  });
+}
+if (clearAllMissionsBtn) {
+  clearAllMissionsBtn.addEventListener("click", () => {
+    clearAllMissions();
   });
 }
 fetchSchemas();

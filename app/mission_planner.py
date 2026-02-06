@@ -15,7 +15,7 @@ from utils.xml_utils import (
 )
 from orchards.tree_placement_generator import TreePlacementGenerator
 
-OPENAI: str = "openai/gpt-5"
+OPENAI: str = "openai/gpt-5.2"
 ANTHROPIC: str = "claude-sonnet-4-20250514"
 GEMINI: str = "gemini/gemini-2.5-pro"
 HUMAN_REVIEW: bool = False
@@ -86,7 +86,12 @@ class MissionPlanner:
             )
             # Claude human verification substitute
             self.verification_checker: LLMInterface = LLMInterface(
-                self.logger, token_path, ARBITER, max_tokens, temperature=temperature
+                self.logger,
+                token_path,
+                ARBITER,
+                max_tokens,
+                temperature=temperature,
+                context_template="verification_agent",
             )
             # object for compiling Promela from XML
             self.promela: PromelaCompiler = PromelaCompiler(

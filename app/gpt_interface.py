@@ -1,5 +1,6 @@
 import logging
 import time
+import json
 
 from dotenv import load_dotenv
 import litellm
@@ -9,7 +10,7 @@ from context import load_template
 from utils.os_utils import read_file
 
 OPENAI_TEMP: float = 1.0
-REASONING: str = "low"
+REASONING: str = "medium"
 
 
 class LLMInterface:
@@ -20,6 +21,7 @@ class LLMInterface:
         model: str = "openai:gpt-4o",
         max_tokens: int = 2000,
         temperature: float = 0.2,
+        context_template: str = "tfr_2026",
     ):
         self.logger: logging.Logger = logger
         # max number of tokens that GPT will respond with, almost 1:1 with words to token
@@ -33,6 +35,7 @@ class LLMInterface:
         self.initial_context_length: int = 0
         # input template file provided when wanting spin verification
         self.promela_template: str = ""
+        self.context_template: str = context_template
         self.temperature: float = temperature
         self.reasoning: str | None = None
         if "openai" in self.model:
@@ -44,15 +47,17 @@ class LLMInterface:
 
     def init_context(self, schema_paths: list[str], context_files: list[str]):
         context_files_content = [read_file(f) for f in context_files]
-        schemas = [{'path': f, 'content': read_file(f)} for f in schema_paths]
+        schemas = [{"path": f, "content": read_file(f)} for f in schema_paths]
 
-        self.context = [{
-            "role": "system",
-            "content": load_template("rap_2026", {
-                "schemas": schemas,
-                "context_files": context_files_content
-            })
-        }]
+        self.context = [
+            {
+                "role": "system",
+                "content": load_template(
+                    self.context_template,
+                    {"schemas": schemas, "context_files": context_files_content},
+                ),
+            }
+        ]
 
         self.initial_context_length = len(self.context)
 
@@ -63,16 +68,21 @@ class LLMInterface:
         context_files: list[str],
     ):
         context_files_content = [read_file(f) for f in context_files]
-        schemas = [{'path': f, 'content': read_file(f)} for f in schema_paths]
+        schemas = [{"path": f, "content": read_file(f)} for f in schema_paths]
 
-        self.context = [{
-            "role": "system",
-            "content": load_template("verification_agent", {
-                "schema": schemas,
-                "promela_template": promela_template,
-                "context_files": context_files_content
-            })
-        }]
+        self.context = [
+            {
+                "role": "system",
+                "content": load_template(
+                    "verification_agent",
+                    {
+                        "schema": schemas,
+                        "promela_template": promela_template,
+                        "context_files": context_files_content,
+                    },
+                ),
+            }
+        ]
 
         self.initial_context_length = len(self.context)
 
@@ -93,6 +103,19 @@ class LLMInterface:
         answered: bool = False
         message: list = self.context.copy()
         message.append({"role": "user", "content": prompt})
+
+        if self.logger.isEnabledFor(logging.DEBUG):
+            payload = {
+                "model": self.model,
+                "messages": message,
+                "temperature": self.temperature,
+                "reasoning_effort": self.reasoning,
+                "max_tokens": self.max_tokens,
+            }
+            self.logger.debug(
+                "LLM request payload: %s",
+                json.dumps(payload, ensure_ascii=False, indent=2),
+            )
 
         while not answered:
             try:

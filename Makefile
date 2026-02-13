@@ -41,6 +41,7 @@ bash:
 		-v ./Makefile:/${WORKSPACE}/Makefile:Z \
 		-v ./app/:/${WORKSPACE}/app:Z \
 		-v ./schemas/:/${WORKSPACE}/schemas:Z \
+		-v ./scripts/:/${WORKSPACE}/scripts:Z \
 		-v ./logs:/${WORKSPACE}/logs:Z \
 		--env-file .env \
 		-p ${WEB_PORT}:${WEB_PORT} \

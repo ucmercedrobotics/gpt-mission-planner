@@ -217,6 +217,13 @@ button.secondary {
   fill: currentColor;
 }
 
+.send-icon {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+  display: none;
+}
+
 .record-dot {
   width: 14px;
   height: 14px;
@@ -240,7 +247,20 @@ button.secondary {
   display: none;
 }
 
+.mic-recording .send-icon,
+.mic-loading .send-icon {
+  display: none;
+}
+
 .mic-recording .record-dot {
+  display: block;
+}
+
+.icon-button.has-text .mic-icon {
+  display: none;
+}
+
+.icon-button.has-text .send-icon {
   display: block;
 }
 

@@ -1,8 +1,11 @@
 from typing import Tuple
+from pathlib import Path
 import tempfile
 import subprocess
 import os
 import stat
+
+from jinja2 import Environment, FileSystemLoader
 
 
 def execute_shell_cmd(command: list) -> Tuple[int, str]:
@@ -32,6 +35,16 @@ def write_out_file(dir: str, mp_out: str | None) -> str:
 
     return temp_file_name
 
-def read_file(path: str) -> str:
-    with open(path, 'r') as f:
+
+def read_file(path: str, variables: dict | None = None) -> str:
+    if path.endswith(".j2"):
+        template_path = Path(path)
+        env = Environment(
+            loader=FileSystemLoader(template_path.parent),
+            trim_blocks=True,
+        )
+        template = env.get_template(template_path.name)
+        return template.render(**(variables or {}))
+
+    with open(path, "r") as f:
         return f.read()

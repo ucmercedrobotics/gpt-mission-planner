@@ -1,12 +1,13 @@
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
+
 def load_template(template_name: str, variables: dict = None) -> str:
     if variables is None:
         variables = {}
 
     current_dir = Path(__file__).parent
-    prompts_dir = current_dir / "prompts"
+    prompts_dir = current_dir / "system_prompts"
 
     env = Environment(
         loader=FileSystemLoader(prompts_dir),

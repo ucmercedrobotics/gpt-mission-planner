@@ -1,0 +1,15 @@
+# NOTE: you must draw a square from the top left to top right to bottom right to bottom left.
+#       otherwise, the webapp won't render the points correctly.
+# start from north west corner (as best as possible)
+points:
+  - lon: -120.423065
+    lat: 37.366449
+  - lon: -120.422867
+    lat: 37.366273
+  - lon: -120.423083
+    lat: 37.366118
+  - lon: -120.423292
+    lat: 37.366288
+dimensions:
+  - row: 10
+    col: 5

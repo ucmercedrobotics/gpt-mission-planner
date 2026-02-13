@@ -54,7 +54,7 @@
         >
           <div class="row">
             <label for="savedMissions">Saved missions</label>
-            <select id="savedMissions"></select>
+            <select id="savedMissions" multiple size="6"></select>
             <div class="mission-actions">
               <button id="loadSavedMission" class="secondary" type="button">
                 Load saved mission
@@ -63,7 +63,10 @@
                 Send to robot
               </button>
               <button id="clearSavedMission" class="secondary" type="button">
-                Clear from cache
+                Clear selected
+              </button>
+              <button id="clearAllMissions" class="secondary" type="button">
+                Clear all
               </button>
             </div>
           </div>
@@ -144,6 +147,9 @@
             >
               <svg class="mic-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 14a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v4a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z" />
+              </svg>
+              <svg class="send-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3.4 20.6 21 12 3.4 3.4l1.6 6.1L15 12l-10 2.5-1.6 6.1Z" />
               </svg>
               <span class="record-dot" aria-hidden="true"></span>
               <span class="spinner" aria-hidden="true"></span>

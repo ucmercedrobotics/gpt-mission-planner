@@ -16,7 +16,7 @@ Fallback nodes MUST NOT be used to model retries, recovery, or alternative param
 
 4. Only actions that are critical to mission success—such as approaching a target tree (approach_tree="true") or performing a sampling/manipulation action—must be placed inside a retry control structure.
 Note that they should be placed together if they are critical to the success of the same subgoal.
-Transit or intermediate moves that merely navigate between waypoints must not be retried.
+Transit, intermediate moves, or relative moves that merely navigate between waypoints must not be retried.
 
 {% include "schemas.j2" %}
 {% include "context_files.j2" %}

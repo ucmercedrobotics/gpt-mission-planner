@@ -1,4 +1,6 @@
 import logging
+from pathlib import Path
+
 import yaml
 import click
 
@@ -18,7 +20,19 @@ SPIN_PATH_KEY: str = "spin_path"
     help="YAML config file",
 )
 def main(config: str):
-    with open(config, "r") as file:
+    def resolve_config_candidate(candidate: str) -> Path:
+        candidate_path = Path(candidate)
+        if candidate_path.is_absolute():
+            return candidate_path
+
+        cwd_resolved = candidate_path.resolve()
+        if cwd_resolved.exists():
+            return cwd_resolved
+
+        return (config_path.parent / candidate_path).resolve()
+
+    config_path = Path(config).resolve()
+    with open(config_path, "r") as file:
         config_yaml: dict = yaml.safe_load(file)
 
     context_files: list[str] = []
@@ -45,13 +59,34 @@ def main(config: str):
             context_files = config_yaml["context_files"]
         else:
             logger.warning("No additional context files found. Proceeding...")
-        if "farm_polygon" in config_yaml:
+        farm_polygon = None
+        farm_polygon_file = config_yaml.get("farm_polygon_file")
+        if farm_polygon_file:
+            polygon_path = resolve_config_candidate(farm_polygon_file)
+            try:
+                with open(polygon_path, "r") as polygon_handle:
+                    farm_polygon = yaml.safe_load(polygon_handle)
+                if not isinstance(farm_polygon, dict):
+                    logger.warning(
+                        "Farm polygon file did not contain a mapping: %s",
+                        polygon_path,
+                    )
+                    farm_polygon = None
+            except FileNotFoundError:
+                logger.warning("Farm polygon file not found: %s", polygon_path)
+            except yaml.YAMLError as exc:
+                logger.warning("Improper farm polygon YAML: %s", exc)
+
+        if farm_polygon is None:
+            farm_polygon = config_yaml.get("farm_polygon")
+
+        if farm_polygon:
             tpg = TreePlacementGenerator(
-                config_yaml["farm_polygon"]["points"],
-                config_yaml["farm_polygon"]["dimensions"],
+                farm_polygon["points"],
+                farm_polygon["dimensions"],
             )
             context_vars = {
-                "farm_polygon": config_yaml["farm_polygon"],
+                "farm_polygon": farm_polygon,
             }
             logger.debug("Farm polygon points defined are: %s", tpg.polygon_coords)
             logger.debug("Farm dimensions defined are: %s", tpg.dimensions)

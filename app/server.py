@@ -578,6 +578,7 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
             data["text"] = text
 
         context_files: list[str] = []
+        context_vars: dict | None = None
 
         # don't generate/check LTL by default
         ltl: bool = False
@@ -629,6 +630,9 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
                     config_yaml["farm_polygon"]["points"],
                     config_yaml["farm_polygon"]["dimensions"],
                 )
+                context_vars = {
+                    "farm_polygon": config_yaml["farm_polygon"],
+                }
                 logger.debug("Farm polygon points defined are: %s", tpg.polygon_coords)
                 logger.debug("Farm dimensions defined are: %s", tpg.dimensions)
             else:
@@ -663,6 +667,7 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
                 spin_path,
                 config_yaml["log_directory"],
                 logger,
+                context_vars,
             )
         except yaml.YAMLError as exc:
             logger.error(f"Improper YAML config: {exc}")

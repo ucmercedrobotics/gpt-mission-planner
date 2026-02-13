@@ -41,6 +41,7 @@ class MissionPlanner:
         spin_path: str,
         log_directory: str,
         logger: logging.Logger,
+        context_vars: dict | None = None,
     ):
         # logger instance
         self.logger: logging.Logger = logger
@@ -48,6 +49,7 @@ class MissionPlanner:
         self.schema_paths: list[str] = schema_paths
         self.lint_xml: bool = lint_xml
         self.context_files: list[str] = context_files
+        self.context_vars: dict | None = context_vars
         # tree placement generator init
         if tpg is not None:
             self.tpg: TreePlacementGenerator = tpg
@@ -72,7 +74,7 @@ class MissionPlanner:
         self.gpt: LLMInterface = LLMInterface(
             self.logger, token_path, MODEL, max_tokens, temperature=temperature
         )
-        self.gpt.init_context(self.schema_paths, self.context_files)
+        self.gpt.init_context(self.schema_paths, self.context_files, self.context_vars)
         # init Promela compiler
         self.ltl: bool = ltl
         if self.ltl:
@@ -103,6 +105,7 @@ class MissionPlanner:
                 self.schema_paths,
                 self.promela.get_promela_template(),
                 self.context_files,
+                self.context_vars,
             )
             # this string gets generated at a later time when promela is written out
             self.promela_path: str = ""

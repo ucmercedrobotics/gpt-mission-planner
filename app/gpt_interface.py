@@ -45,8 +45,13 @@ class LLMInterface:
             self.temperature = OPENAI_TEMP
             self.reasoning = REASONING
 
-    def init_context(self, schema_paths: list[str], context_files: list[str]):
-        context_files_content = [read_file(f) for f in context_files]
+    def init_context(
+        self,
+        schema_paths: list[str],
+        context_files: list[str],
+        context_vars: dict | None = None,
+    ):
+        context_files_content = [read_file(f, context_vars) for f in context_files]
         schemas = [{"path": f, "content": read_file(f)} for f in schema_paths]
 
         self.context = [
@@ -66,8 +71,9 @@ class LLMInterface:
         schema_paths: list[str],
         promela_template: str,
         context_files: list[str],
+        context_vars: dict | None = None,
     ):
-        context_files_content = [read_file(f) for f in context_files]
+        context_files_content = [read_file(f, context_vars) for f in context_files]
         schemas = [{"path": f, "content": read_file(f)} for f in schema_paths]
 
         self.context = [

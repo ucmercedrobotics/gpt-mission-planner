@@ -12,11 +12,14 @@ schema:
 # NOTE: this is only for backwards compat when we change schema formats
 lint_xml: True
 context_files:
-  # - "./app/resources/context/prompts/mission_planner/wheeled/ucm_quad.txt"
-  # - "./app/resources/context/prompts/mission_planner/wheeled/reza_medium_polygon.txt"
-  # - "./app/resources/context/prompts/mission_planner/wheeled/greece.txt"
-  - "./app/resources/context/prompts/mission_planner/wheeled/shiraz.txt"
+  # - "./app/resources/context/prompts/mission_planner/wheeled/ucm_quad.j2"
+  # - "./app/resources/context/prompts/mission_planner/wheeled/reza_medium_polygon.j2"
+  # - "./app/resources/context/prompts/mission_planner/wheeled/greece.j2"
+  # - "./app/resources/context/prompts/mission_planner/wheeled/shiraz.j2"
+  - "./app/resources/context/prompts/mission_planner/wheeled/castle.j2"
 farm_polygon:
+# NOTE: you must draw a square from the top left to top right to bottom right to bottom left.
+#       otherwise, the webapp won't render the points correctly.
   # QUAD
   # points:
   #   # start from north west corner (as best as possible)
@@ -47,20 +50,33 @@ farm_polygon:
   #   - row: 18
   #     col: 8
   # shiraz
+  # points:
+  #   # start from north west corner (as best as possible)
+  #   - lon: -121.1107158832017
+  #     lat: 37.353951452025434
+  #   - lon: -121.11058914882697
+  #     lat: 37.353951452025434
+  #   - lon: -121.11059048993147
+  #     lat: 37.353876295651744
+  #   - lon: -121.1107158832017
+  #     lat: 37.35387256448231
+  # dimensions:
+  #   # draw this out from top (north) to bottom (south)
+  #   - row: 4
+  #     col: 3
+  # castle
   points:
-    # start from north west corner (as best as possible)
-    - lon: -121.1107158832017
-      lat: 37.353951452025434
-    - lon: -121.11058914882697
-      lat: 37.353951452025434
-    - lon: -121.11059048993147
-      lat: 37.353876295651744
-    - lon: -121.1107158832017
-      lat: 37.35387256448231
+  - lon: -120.578217
+    lat: 37.373989
+  - lon: -120.578167
+    lat: 37.373989
+  - lon: -120.578167
+    lat: 37.373958
+  - lon: -120.578217
+    lat: 37.373958
   dimensions:
-    # draw this out from top (north) to bottom (south)
-    - row: 4
-      col: 3
+  - row: 4
+    col: 3
 host: 172.17.0.1
 port: 12346
 # LTL generation?

@@ -1,0 +1,34 @@
+{% set rows = farm_polygon.dimensions[0].row %}
+{% set cols = farm_polygon.dimensions[0].col %}
+{% set top_left = farm_polygon.points[0] %}
+{% set top_right = farm_polygon.points[1] %}
+{% set bottom_right = farm_polygon.points[2] %}
+{% set bottom_left = farm_polygon.points[3] %}
+{% set top_right_tree = cols %}
+{% set bottom_left_tree = (rows - 1) * cols + 1 %}
+{% set bottom_right_tree = rows * cols %}
+FARM LAYOUT:
+
+Top Left (NW) (tree 1): {{ top_left.lat }}, {{ top_left.lon }}
+
+Top Right (NE) (tree {{ top_right_tree }}): {{ top_right.lat }}, {{ top_right.lon }}
+
+Bottom Left (SW) (tree {{ bottom_left_tree }}): {{ bottom_left.lat }}, {{ bottom_left.lon }}
+
+Bottom Right (SE) (tree {{ bottom_right_tree }}): {{ bottom_right.lat }}, {{ bottom_right.lon }}
+
+Grid size:
+
+{{ cols }} trees per row
+
+{{ rows }} trees per columns
+
+Total trees: {{ cols }} × {{ rows }} = {{ rows * cols }} trees
+
+RULES:
+- Numbering: left-to-right, top-to-bottom
+- You cannot drive through columns of trees
+- If moving between columns, move to the first/last row trees to exit the current column and enter the target column
+- Always plan the full path including intermediate trees
+
+USE THIS INFORMATION TO CREATE THE XML MISSION.

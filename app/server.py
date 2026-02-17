@@ -48,6 +48,58 @@ config = "./app/config/localhost.yaml"
 with open(config, "r") as f:
     config_yaml = yaml.safe_load(f)
 
+
+def _resolve_config_path(config_path: str, candidate: str) -> Path:
+    candidate_path = Path(candidate)
+    if candidate_path.is_absolute():
+        return candidate_path
+
+    cwd_resolved = candidate_path.resolve()
+    if cwd_resolved.exists():
+        return cwd_resolved
+
+    return (Path(config_path).resolve().parent / candidate_path).resolve()
+
+
+def _load_farm_polygon_from_file(config_data: dict, config_path: str):
+    polygon_file = config_data.get("farm_polygon_file")
+    if not polygon_file:
+        return None, None
+
+    polygon_path = _resolve_config_path(config_path, polygon_file)
+    try:
+        with open(polygon_path, "r") as polygon_handle:
+            polygon_yaml = yaml.safe_load(polygon_handle)
+        if not isinstance(polygon_yaml, dict):
+            logger.warning(
+                "Farm polygon file did not contain a mapping: %s",
+                polygon_path,
+            )
+            return None, polygon_path
+        return polygon_yaml, polygon_path
+    except FileNotFoundError:
+        logger.warning("Farm polygon file not found: %s", polygon_path)
+        return None, polygon_path
+    except yaml.YAMLError as exc:
+        logger.warning("Improper farm polygon YAML: %s", exc)
+        return None, polygon_path
+
+
+farm_polygon_from_file, farm_polygon_path = _load_farm_polygon_from_file(
+    config_yaml, config
+)
+if farm_polygon_from_file:
+    if "farm_polygon" in config_yaml:
+        logger.info(
+            "Using farm polygon from file %s; ignoring inline farm_polygon",
+            farm_polygon_path,
+        )
+    config_yaml["farm_polygon"] = farm_polygon_from_file
+
+logging_level = config_yaml.get("logging", "INFO")
+logging.getLogger().setLevel(logging._nameToLevel.get(logging_level, logging.INFO))
+logger.setLevel(logging._nameToLevel.get(logging_level, logging.INFO))
+
 app = FastAPI()
 
 # Add CORS middleware
@@ -479,6 +531,41 @@ def send_mission(
     return {"result": result, "sent": True}
 
 
+@app.post("/missions/delete")
+def delete_missions(payload: dict = Body(default={})):  # type: ignore
+    mission_ids = payload.get("ids") if isinstance(payload, dict) else None
+    if not isinstance(mission_ids, list) or not mission_ids:
+        return {"error": "Missing mission ids"}
+
+    mission_dir = Path("logs") / "missions"
+    deleted = []
+    missing = []
+
+    for mission_id in mission_ids:
+        if not isinstance(mission_id, str) or not mission_id.strip():
+            continue
+        mission_id = mission_id.strip()
+        files = [
+            mission_dir / f"{mission_id}_request.json",
+            mission_dir / f"{mission_id}_result.xml",
+            mission_dir / f"{mission_id}_tree_points.json",
+        ]
+        removed_any = False
+        for file_path in files:
+            try:
+                if file_path.exists():
+                    file_path.unlink()
+                    removed_any = True
+            except Exception as exc:
+                logger.warning("Failed deleting %s: %s", file_path, exc)
+        if removed_any:
+            deleted.append(mission_id)
+        else:
+            missing.append(mission_id)
+
+    return {"deleted": deleted, "missing": missing}
+
+
 @app.post("/generate")
 async def generate(request: str = Form(...), file: UploadFile = File(None)):
     async def _generate():
@@ -539,6 +626,7 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
             data["text"] = text
 
         context_files: list[str] = []
+        context_vars: dict | None = None
 
         # don't generate/check LTL by default
         ltl: bool = False
@@ -590,6 +678,9 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
                     config_yaml["farm_polygon"]["points"],
                     config_yaml["farm_polygon"]["dimensions"],
                 )
+                context_vars = {
+                    "farm_polygon": config_yaml["farm_polygon"],
+                }
                 logger.debug("Farm polygon points defined are: %s", tpg.polygon_coords)
                 logger.debug("Farm dimensions defined are: %s", tpg.dimensions)
             else:
@@ -624,6 +715,7 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
                 spin_path,
                 config_yaml["log_directory"],
                 logger,
+                context_vars,
             )
         except yaml.YAMLError as exc:
             logger.error(f"Improper YAML config: {exc}")

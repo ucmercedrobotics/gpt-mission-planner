@@ -17,8 +17,8 @@ context_files:
   # - "./app/resources/context/prompts/mission_planner/wheeled/thompson_rows.j2"
 # Farm polygon can be inlined or loaded from a separate YAML file.
 # farm_polygon_file: "farm_polygons/castle.yaml"
-farm_polygon_file: "farm_polygons/shiraz.yaml"
-# farm_polygon_file: "farm_polygons/reza_medium.yaml"
+# farm_polygon_file: "farm_polygons/shiraz.yaml"
+farm_polygon_file: "farm_polygons/reza_medium.yaml"
 host: 172.17.0.1
 port: 12346
 # LTL generation?

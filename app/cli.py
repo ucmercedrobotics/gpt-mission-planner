@@ -84,6 +84,8 @@ def main(config: str):
             tpg = TreePlacementGenerator(
                 farm_polygon["points"],
                 farm_polygon["dimensions"],
+                perimeter_margin_m=farm_polygon.get("perimeter_margin_m", 5.0),
+                traversal_axis=farm_polygon.get("traversal_axis", "row"),
             )
             context_vars = {
                 "farm_polygon": farm_polygon,

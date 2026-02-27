@@ -6,23 +6,33 @@ using coordinate transformations between WGS84 and UTM projections.
 """
 
 import math
-from typing import List, Tuple, Dict, Any, Optional
+from enum import Enum
+from typing import List, Tuple, Dict, Any
 
 import numpy as np
-from shapely.geometry import Polygon, LineString
-from lxml import etree
+from shapely.geometry import Polygon
 
 from app.utils.gps_utils import CoordinateSystem
 
 
+class TraversalAxis(str, Enum):
+    ROW = "row"
+    COLUMN = "column"
+
+
 class TreePlacementGenerator:
     """Generates tree placement points within a polygon area."""
+
+    TRAVERSAL_ROW = TraversalAxis.ROW
+    TRAVERSAL_COLUMN = TraversalAxis.COLUMN
 
     def __init__(
         self,
         polygon_coords: list,
         dimensions: list,
         epsg: int = CoordinateSystem.UTMZ10N,
+        perimeter_margin_m: float = 5.0,
+        traversal_axis: TraversalAxis | str = TraversalAxis.COLUMN,
     ) -> None:
         """
         Initialize the tree placement generator.
@@ -33,6 +43,11 @@ class TreePlacementGenerator:
         self.coord_system = CoordinateSystem(epsg)
         self.polygon_coords = self._make_polygon_array(polygon_coords)
         self.dimensions = self._make_dimension_array(dimensions)
+        self.perimeter_margin_m = perimeter_margin_m
+        self.traversal_axis: TraversalAxis = self._validate_traversal_axis(
+            traversal_axis
+        )
+        self.perimeter_waypoints: List[Dict[str, Any]] = []
 
     def generate_tree_points(
         self,
@@ -52,6 +67,7 @@ class TreePlacementGenerator:
             - lat: Latitude in decimal degrees
             - lon: Longitude in decimal degrees
             - row_waypoints: List of (lat, lon) tuples for waypoints between trees in the same row
+            - perimeter_waypoints: Lane-based entry/exit waypoints outside block edges
         """
         # Convert to UTM and create polygon
         polygon_xy = [
@@ -72,58 +88,19 @@ class TreePlacementGenerator:
         # Transform polygon to local coordinate system
         poly_local = self._transform_polygon_to_local(polygon_xy, rotation_info)
 
-        # Generate tree points
-        self.tree_points = self._generate_points_in_local_system(
+        # Build lane-based perimeter waypoints (one per in-between path), each with entry+exit.
+        self.perimeter_waypoints = self._generate_lane_waypoints(
             poly_local, self.dimensions, rotation_info
         )
+
+        # Generate tree points
+        self.tree_points = self._generate_points_in_local_system(
+            poly_local,
+            self.dimensions,
+            rotation_info,
+            self.perimeter_waypoints,
+        )
         return self.tree_points
-
-    def replace_tree_ids_with_gps(self, xml_file: str) -> str:
-        """
-        Replace the id attribute of MoveToTreeID elements with the closest row waypoint's GPS coordinates.
-        If there was a previous movement, use the closest waypoint to the previous location; otherwise, use any waypoint.
-        Args:
-            xml_file (str): Path to the XML file to modify.
-        Returns:
-            str: Path to the modified XML file.
-        """
-        root = etree.parse(xml_file).getroot()
-
-        previous_lat = None
-        previous_lon = None
-
-        for tree_elem in root.findall(".//MoveToTreeID"):
-            id = tree_elem.get("id")
-            if id is None:
-                continue
-            tree_info = self.tree_points[int(id) - 1]
-            waypoints = tree_info.get("row_waypoints", [])
-            chosen_wp = None
-            # If there was a previous movement, pick the closest waypoint
-            if previous_lat is not None and previous_lon is not None and waypoints:
-
-                def dist(wp):
-                    return (wp[0] - previous_lat) ** 2 + (wp[1] - previous_lon) ** 2
-
-                chosen_wp = min(waypoints, key=dist)
-            elif waypoints:
-                chosen_wp = waypoints[0]
-            else:
-                # Fallback to tree point if no waypoints
-                chosen_wp = (tree_info["lat"], tree_info["lon"])
-
-            tree_elem.set("latitude", f"{chosen_wp[0]}")
-            tree_elem.set("longitude", f"{chosen_wp[1]}")
-            tree_elem.attrib.pop("id", None)
-            tree_elem.tag = "MoveToGPSLocation"
-
-            previous_lat, previous_lon = chosen_wp
-
-        etree.indent(root, space="    ")  # 4 spaces indentation
-        with open(xml_file, "w", encoding="utf-8") as f:
-            f.write(etree.tostring(root, pretty_print=True, encoding="unicode"))
-
-        return xml_file
 
     def _make_polygon_array(self, coords: list) -> np.ndarray:
         """Create a 2D array representing the polygon coordinates."""
@@ -194,6 +171,7 @@ class TreePlacementGenerator:
         poly_local: Polygon,
         trees_per_row: List[int],
         rotation_info: Dict[str, float],
+        perimeter_waypoints: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         """Generate tree points within the local coordinate system."""
 
@@ -208,6 +186,7 @@ class TreePlacementGenerator:
         )
 
         rows = len(trees_per_row)
+        cols = int(max(trees_per_row)) if rows > 0 else 0
         tree_points = []
         tree_counter = 1
         positions = {}
@@ -230,6 +209,13 @@ class TreePlacementGenerator:
 
                 # Transform back to global coords
                 lat, lon = self._transform_to_global_coords(x, y, rotation_info)
+                tree_lane_waypoints = self._get_tree_lane_waypoints(
+                    row_index=row_index,
+                    col_index=col_index,
+                    lane_waypoints=perimeter_waypoints,
+                    rows=rows,
+                    cols=cols,
+                )
 
                 tree_points.append(
                     {
@@ -239,6 +225,7 @@ class TreePlacementGenerator:
                         "lat": lat,
                         "lon": lon,
                         "row_waypoints": [],
+                        "perimeter_waypoints": tree_lane_waypoints,
                     }
                 )
                 positions[(row_index, col_index)] = (x, y, tree_counter - 1)
@@ -257,40 +244,162 @@ class TreePlacementGenerator:
 
         return tree_points
 
-    def _find_polygon_width_at_y(
-        self, poly_local: Polygon, y: float, min_x: float, max_x: float
-    ) -> Optional[Tuple[float, float]]:
-        """Find the polygon width at a given y level."""
-        # Create horizontal scan line
-        scan_line = LineString([(min_x - 100, y), (max_x + 100, y)])
-        intersection = poly_local.intersection(scan_line)
+    def _get_tree_lane_waypoints(
+        self,
+        row_index: int,
+        col_index: int,
+        lane_waypoints: List[Dict[str, Any]],
+        rows: int,
+        cols: int,
+    ) -> List[Dict[str, Any]]:
+        """Return only the entry/exit lane waypoint records adjacent to a tree."""
+        if not lane_waypoints:
+            return []
 
-        if intersection.is_empty:
-            return None
+        axis_size = self._select_by_axis(rows, cols)
+        lane_count = self._lane_count(axis_size)
+        primary_index = self._select_by_axis(row_index, col_index)
+        candidate_lane_indices = {
+            lane_idx
+            for lane_idx in (primary_index, primary_index + 1)
+            if 1 <= lane_idx <= lane_count
+        }
 
-        # Handle multiple segments by selecting the longest
-        if intersection.geom_type == "MultiLineString":
-            segment = max(intersection.geoms, key=lambda s: s.length)
-        else:
-            segment = intersection
+        if not candidate_lane_indices:
+            return []
 
-        coords = list(segment.coords)
-        start_x, end_x = coords[0][0], coords[-1][0]
+        return [
+            lane
+            for lane in lane_waypoints
+            if lane.get("lane_index") in candidate_lane_indices
+        ]
 
-        # Ensure start_x <= end_x
-        if start_x > end_x:
-            start_x, end_x = end_x, start_x
+    def _validate_traversal_axis(
+        self, traversal_axis: TraversalAxis | str
+    ) -> TraversalAxis:
+        """Validate traversal axis value."""
+        if isinstance(traversal_axis, TraversalAxis):
+            return traversal_axis
 
-        return start_x, end_x
+        axis = (traversal_axis or "").strip().lower()
+        if axis == TraversalAxis.ROW.value:
+            return TraversalAxis.ROW
+        if axis == TraversalAxis.COLUMN.value:
+            return TraversalAxis.COLUMN
 
-    def _calculate_tree_x_position(
-        self, start_x: float, end_x: float, col_index: int, num_trees: int
-    ) -> float:
-        """Calculate x position for a tree within a row."""
-        if num_trees == 1:
-            return (start_x + end_x) / 2
-        else:
-            return start_x + col_index / (num_trees - 1) * (end_x - start_x)
+        raise ValueError(
+            "traversal_axis must be TreePlacementGenerator.TRAVERSAL_ROW or "
+            "TreePlacementGenerator.TRAVERSAL_COLUMN."
+        )
+
+    def _interpolate_point(
+        self,
+        p0: Tuple[float, float],
+        p1: Tuple[float, float],
+        t: float,
+    ) -> Tuple[float, float]:
+        """Linear interpolation between two points."""
+        return ((1 - t) * p0[0] + t * p1[0], (1 - t) * p0[1] + t * p1[1])
+
+    def _extend_segment_ends(
+        self,
+        start: Tuple[float, float],
+        end: Tuple[float, float],
+    ) -> Tuple[Tuple[float, float], Tuple[float, float]]:
+        """Extend segment both directions by perimeter margin."""
+        dx = end[0] - start[0]
+        dy = end[1] - start[1]
+        length = math.hypot(dx, dy)
+        if length == 0:
+            return start, end
+        ux = dx / length
+        uy = dy / length
+        entry = (
+            start[0] - self.perimeter_margin_m * ux,
+            start[1] - self.perimeter_margin_m * uy,
+        )
+        exit = (
+            end[0] + self.perimeter_margin_m * ux,
+            end[1] + self.perimeter_margin_m * uy,
+        )
+        return entry, exit
+
+    def _generate_lane_waypoints(
+        self,
+        poly_local: Polygon,
+        trees_per_row: List[int],
+        rotation_info: Dict[str, float],
+    ) -> List[Dict[str, Any]]:
+        """Generate one entry/exit waypoint pair for each in-between row/column lane."""
+        coords = list(poly_local.exterior.coords)
+        top_left, top_right, bottom_right, bottom_left = (
+            coords[0],
+            coords[1],
+            coords[2],
+            coords[3],
+        )
+
+        lanes: List[Dict[str, Any]] = []
+        rows = len(trees_per_row)
+        cols = int(max(trees_per_row)) if len(trees_per_row) > 0 else 0
+        axis_size = self._select_by_axis(rows, cols)
+        lane_count = self._lane_count(axis_size)
+
+        if lane_count <= 0:
+            return lanes
+
+        start_edge, end_edge = self._axis_edges(
+            top_left,
+            top_right,
+            bottom_right,
+            bottom_left,
+        )
+
+        for lane_idx in range(lane_count):
+            t_mid = (lane_idx + 0.5) / lane_count
+            lane_start = self._interpolate_point(start_edge[0], start_edge[1], t_mid)
+            lane_end = self._interpolate_point(end_edge[0], end_edge[1], t_mid)
+            entry_local, exit_local = self._extend_segment_ends(lane_start, lane_end)
+
+            entry_latlon = self._transform_to_global_coords(
+                entry_local[0], entry_local[1], rotation_info
+            )
+            exit_latlon = self._transform_to_global_coords(
+                exit_local[0], exit_local[1], rotation_info
+            )
+            lanes.append(
+                {
+                    "axis": self.traversal_axis.value,
+                    "lane_index": lane_idx + 1,
+                    "entry": entry_latlon,
+                    "exit": exit_latlon,
+                }
+            )
+
+        return lanes
+
+    def _select_by_axis(self, row_value: int, col_value: int) -> int:
+        """Select row or column value according to traversal axis."""
+        return row_value if self.traversal_axis == TraversalAxis.ROW else col_value
+
+    def _lane_count(self, axis_size: int) -> int:
+        """Number of in-between lanes from a single axis size."""
+        return max(0, axis_size - 1)
+
+    def _axis_edges(
+        self,
+        top_left: Tuple[float, float],
+        top_right: Tuple[float, float],
+        bottom_right: Tuple[float, float],
+        bottom_left: Tuple[float, float],
+    ) -> Tuple[
+        Tuple[Tuple[float, float], Tuple[float, float]],
+        Tuple[Tuple[float, float], Tuple[float, float]],
+    ]:
+        """Return start/end edges to interpolate one lane centerline generically."""
+        if self.traversal_axis == TraversalAxis.ROW:
+            return (top_left, bottom_left), (top_right, bottom_right)
+        return (top_left, top_right), (bottom_left, bottom_right)
 
     def _transform_to_global_coords(
         self, x: float, y: float, rotation_info: Dict[str, float]

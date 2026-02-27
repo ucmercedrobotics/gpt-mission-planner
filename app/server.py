@@ -677,6 +677,12 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
                 tpg = TreePlacementGenerator(
                     config_yaml["farm_polygon"]["points"],
                     config_yaml["farm_polygon"]["dimensions"],
+                    perimeter_margin_m=config_yaml["farm_polygon"].get(
+                        "perimeter_margin_m", 5.0
+                    ),
+                    traversal_axis=config_yaml["farm_polygon"].get(
+                        "traversal_axis", "row"
+                    ),
                 )
                 context_vars = {
                     "farm_polygon": config_yaml["farm_polygon"],

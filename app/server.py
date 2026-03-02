@@ -302,10 +302,10 @@ def _extract_tree_points_from_bin(
                 xml_text = decoded
             continue
 
-        if isinstance(data, list) and data and isinstance(data[0], dict):
+        if isinstance(data, dict) and isinstance(data.get("trees"), list):
             points: list[dict[str, float]] = []
             full_points: list[dict[str, Any]] = []
-            for item in data:
+            for item in data["trees"]:
                 if not isinstance(item, dict):
                     continue
                 full_points.append(item)

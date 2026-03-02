@@ -16,6 +16,8 @@ from app.utils.gps_utils import CoordinateSystem
 
 
 class TraversalAxis(str, Enum):
+    """Enum for tree traversal direction."""
+
     ROW = "row"
     COLUMN = "column"
 
@@ -38,69 +40,165 @@ class TreePlacementGenerator:
         Initialize the tree placement generator.
 
         Args:
+            traversal_axis: TraversalAxis enum or string ("row" or "column")
             epsg: EPSG code for UTM projection
         """
         self.coord_system = CoordinateSystem(epsg)
         self.polygon_coords = self._make_polygon_array(polygon_coords)
         self.dimensions = self._make_dimension_array(dimensions)
         self.perimeter_margin_m = perimeter_margin_m
-        self.traversal_axis: TraversalAxis = self._validate_traversal_axis(
-            traversal_axis
-        )
+        self.traversal_axis = self._parse_traversal_axis(traversal_axis)
         self.perimeter_waypoints: List[Dict[str, Any]] = []
 
-    def generate_tree_points(
-        self,
-    ) -> List[Dict[str, Any]]:
-        """
-        Generate tree placement points within a polygon.
+    def _parse_traversal_axis(self, axis: TraversalAxis | str) -> TraversalAxis:
+        """Convert string or enum to TraversalAxis enum."""
+        if isinstance(axis, TraversalAxis):
+            return axis
+        axis_str = str(axis).strip().lower()
+        if axis_str == TraversalAxis.ROW.value:
+            return TraversalAxis.ROW
+        if axis_str == TraversalAxis.COLUMN.value:
+            return TraversalAxis.COLUMN
+        raise ValueError(f"Invalid traversal axis '{axis}'. Must be 'row' or 'column'.")
 
-        Args:
-            polygon_coords: List of (lon, lat) coordinates defining the polygon. We assume index 0 -> 1 edge is north facing!!
-            trees_per_row: List containing number of trees for each row
+    def generate_tree_payload(self) -> Dict[str, Any]:
+        """Generate compact payload with minimal tree fields and row-indexed entrances."""
+        poly_local, rotation_info = self._build_local_geometry()
+        trees = self._generate_minimal_tree_points(
+            poly_local, self.dimensions, rotation_info
+        )
 
-        Returns:
-            List of dictionaries containing tree placement information with keys:
-            - tree_index: Sequential tree number
-            - row: Row number (1-based)
-            - col: Column number within row (1-based)
-            - lat: Latitude in decimal degrees
-            - lon: Longitude in decimal degrees
-            - row_waypoints: List of (lat, lon) tuples for waypoints between trees in the same row
-            - perimeter_waypoints: Lane-based entry/exit waypoints outside block edges
-        """
-        # Convert to UTM and create polygon
+        rows = len(self.dimensions)
+        lane_count = self._lane_count(rows)
+        original_axis = self.traversal_axis
+        self.traversal_axis = TraversalAxis.ROW
+        try:
+            row_lane_waypoints = self._generate_lane_waypoints(
+                poly_local, self.dimensions, rotation_info
+            )
+        finally:
+            self.traversal_axis = original_axis
+
+        self.perimeter_waypoints = row_lane_waypoints
+
+        lanes_by_index = {
+            int(lane.get("lane_index")): lane
+            for lane in row_lane_waypoints
+            if isinstance(lane.get("lane_index"), int)
+        }
+
+        entrance_points: List[Dict[str, Any]] = []
+        entrance_index_by_point: Dict[Tuple[float, float], int] = {}
+        row_to_entrance_indices: Dict[str, List[int]] = {}
+
+        for row_number in range(1, rows + 1):
+            row_entrance_indices: List[int] = []
+            for lane_idx in self._adjacent_lane_indices(row_number, lane_count):
+                lane = lanes_by_index.get(lane_idx)
+                if not lane:
+                    continue
+                for side in ("entry", "exit"):
+                    point = lane.get(side)
+                    if not isinstance(point, (tuple, list)) or len(point) < 2:
+                        continue
+                    point_key = (float(point[0]), float(point[1]))
+                    entrance_index = entrance_index_by_point.get(point_key)
+                    if entrance_index is None:
+                        entrance_index = len(entrance_points) + 1
+                        entrance_index_by_point[point_key] = entrance_index
+                        entrance_points.append(
+                            {
+                                "entrance_index": entrance_index,
+                                "lat": point_key[0],
+                                "lon": point_key[1],
+                            }
+                        )
+                    if entrance_index not in row_entrance_indices:
+                        row_entrance_indices.append(entrance_index)
+            row_to_entrance_indices[str(row_number)] = row_entrance_indices
+
+        compact_trees = []
+        for tree in trees:
+            compact_trees.append(
+                {
+                    "tree_index": tree["tree_index"],
+                    "row": tree["row"],
+                    "col": tree["col"],
+                    "lat": tree["lat"],
+                    "lon": tree["lon"],
+                }
+            )
+
+        payload: Dict[str, Any] = {
+            "trees": compact_trees,
+            "row_entrances": entrance_points,
+            "row_to_entrance_indices": row_to_entrance_indices,
+        }
+
+        return payload
+
+    def _build_local_geometry(self) -> Tuple[Polygon, Dict[str, float]]:
+        """Build local rotated polygon and transformation context."""
         polygon_xy = [
             self.coord_system.latlon_to_xy(lat, lon) for lon, lat in self.polygon_coords
         ]
         top_edge_start = self.polygon_coords[0]
         top_edge_end = self.polygon_coords[1]
 
-        # Get top edge coordinates in UTM
         top_start_xy = self.coord_system.latlon_to_xy(
             top_edge_start[1], top_edge_start[0]
         )
         top_end_xy = self.coord_system.latlon_to_xy(top_edge_end[1], top_edge_end[0])
-
-        # Calculate rotation to make top edge horizontal
         rotation_info = self._calculate_rotation(top_start_xy, top_end_xy)
-
-        # Transform polygon to local coordinate system
         poly_local = self._transform_polygon_to_local(polygon_xy, rotation_info)
+        return poly_local, rotation_info
 
-        # Build lane-based perimeter waypoints (one per in-between path), each with entry+exit.
-        self.perimeter_waypoints = self._generate_lane_waypoints(
-            poly_local, self.dimensions, rotation_info
+    def _generate_minimal_tree_points(
+        self,
+        poly_local: Polygon,
+        trees_per_row: List[int],
+        rotation_info: Dict[str, float],
+    ) -> List[Dict[str, Any]]:
+        """Generate minimal tree objects with index, row, col, lat, lon."""
+
+        coords = list(poly_local.exterior.coords)
+        top_left, top_right, bottom_right, bottom_left = (
+            coords[0],
+            coords[1],
+            coords[2],
+            coords[3],
         )
 
-        # Generate tree points
-        self.tree_points = self._generate_points_in_local_system(
-            poly_local,
-            self.dimensions,
-            rotation_info,
-            self.perimeter_waypoints,
-        )
-        return self.tree_points
+        rows = len(trees_per_row)
+        tree_points: List[Dict[str, Any]] = []
+        tree_counter = 1
+
+        for row_index, num_trees in enumerate(trees_per_row):
+            t = row_index / (rows - 1) if rows > 1 else 0
+
+            row_start_x = (1 - t) * top_left[0] + t * bottom_left[0]
+            row_start_y = (1 - t) * top_left[1] + t * bottom_left[1]
+            row_end_x = (1 - t) * top_right[0] + t * bottom_right[0]
+            row_end_y = (1 - t) * top_right[1] + t * bottom_right[1]
+
+            for col_index in range(num_trees):
+                u = col_index / (num_trees - 1) if num_trees > 1 else 0.5
+                x = (1 - u) * row_start_x + u * row_end_x
+                y = (1 - u) * row_start_y + u * row_end_y
+
+                lat, lon = self._transform_to_global_coords(x, y, rotation_info)
+                tree_points.append(
+                    {
+                        "tree_index": tree_counter,
+                        "row": row_index + 1,
+                        "col": col_index + 1,
+                        "lat": lat,
+                        "lon": lon,
+                    }
+                )
+                tree_counter += 1
+
+        return tree_points
 
     def _make_polygon_array(self, coords: list) -> np.ndarray:
         """Create a 2D array representing the polygon coordinates."""
@@ -165,132 +263,6 @@ class TreePlacementGenerator:
             poly_local_coords.append((x_rot, y_rot))
 
         return Polygon(poly_local_coords)
-
-    def _generate_points_in_local_system(
-        self,
-        poly_local: Polygon,
-        trees_per_row: List[int],
-        rotation_info: Dict[str, float],
-        perimeter_waypoints: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
-        """Generate tree points within the local coordinate system."""
-
-        # Get polygon boundary coords (assumes 4-point polygon for orchard block)
-        coords = list(poly_local.exterior.coords)
-        # Order: top-left, top-right, bottom-right, bottom-left
-        top_left, top_right, bottom_right, bottom_left = (
-            coords[0],
-            coords[1],
-            coords[2],
-            coords[3],
-        )
-
-        rows = len(trees_per_row)
-        cols = int(max(trees_per_row)) if rows > 0 else 0
-        tree_points = []
-        tree_counter = 1
-        positions = {}
-
-        for row_index, num_trees in enumerate(trees_per_row):
-            t = row_index / (rows - 1) if rows > 1 else 0  # interpolation factor
-
-            # Interpolate row start and end along polygon edges
-            row_start_x = (1 - t) * top_left[0] + t * bottom_left[0]
-            row_start_y = (1 - t) * top_left[1] + t * bottom_left[1]
-            row_end_x = (1 - t) * top_right[0] + t * bottom_right[0]
-            row_end_y = (1 - t) * top_right[1] + t * bottom_right[1]
-
-            for col_index in range(num_trees):
-                u = (
-                    col_index / (num_trees - 1) if num_trees > 1 else 0.5
-                )  # interpolation factor across row
-                x = (1 - u) * row_start_x + u * row_end_x
-                y = (1 - u) * row_start_y + u * row_end_y
-
-                # Transform back to global coords
-                lat, lon = self._transform_to_global_coords(x, y, rotation_info)
-                tree_lane_waypoints = self._get_tree_lane_waypoints(
-                    row_index=row_index,
-                    col_index=col_index,
-                    lane_waypoints=perimeter_waypoints,
-                    rows=rows,
-                    cols=cols,
-                )
-
-                tree_points.append(
-                    {
-                        "tree_index": tree_counter,
-                        "row": row_index + 1,
-                        "col": col_index + 1,
-                        "lat": lat,
-                        "lon": lon,
-                        "row_waypoints": [],
-                        "perimeter_waypoints": tree_lane_waypoints,
-                    }
-                )
-                positions[(row_index, col_index)] = (x, y, tree_counter - 1)
-                tree_counter += 1
-
-        # adding waypoints in between trees
-        for (row_idx, col_idx), (x, y, idx) in positions.items():
-            next_col_key = (row_idx, col_idx + 1)
-            if next_col_key in positions:
-                nx, ny, nidx = positions[next_col_key]
-                mx = (x + nx) / 2
-                my = (y + ny) / 2
-                mlat, mlon = self._transform_to_global_coords(mx, my, rotation_info)
-                tree_points[idx]["row_waypoints"].append((mlat, mlon))
-                tree_points[nidx]["row_waypoints"].append((mlat, mlon))
-
-        return tree_points
-
-    def _get_tree_lane_waypoints(
-        self,
-        row_index: int,
-        col_index: int,
-        lane_waypoints: List[Dict[str, Any]],
-        rows: int,
-        cols: int,
-    ) -> List[Dict[str, Any]]:
-        """Return only the entry/exit lane waypoint records adjacent to a tree."""
-        if not lane_waypoints:
-            return []
-
-        axis_size = self._select_by_axis(rows, cols)
-        lane_count = self._lane_count(axis_size)
-        primary_index = self._select_by_axis(row_index, col_index)
-        candidate_lane_indices = {
-            lane_idx
-            for lane_idx in (primary_index, primary_index + 1)
-            if 1 <= lane_idx <= lane_count
-        }
-
-        if not candidate_lane_indices:
-            return []
-
-        return [
-            lane
-            for lane in lane_waypoints
-            if lane.get("lane_index") in candidate_lane_indices
-        ]
-
-    def _validate_traversal_axis(
-        self, traversal_axis: TraversalAxis | str
-    ) -> TraversalAxis:
-        """Validate traversal axis value."""
-        if isinstance(traversal_axis, TraversalAxis):
-            return traversal_axis
-
-        axis = (traversal_axis or "").strip().lower()
-        if axis == TraversalAxis.ROW.value:
-            return TraversalAxis.ROW
-        if axis == TraversalAxis.COLUMN.value:
-            return TraversalAxis.COLUMN
-
-        raise ValueError(
-            "traversal_axis must be TreePlacementGenerator.TRAVERSAL_ROW or "
-            "TreePlacementGenerator.TRAVERSAL_COLUMN."
-        )
 
     def _interpolate_point(
         self,
@@ -379,12 +351,27 @@ class TreePlacementGenerator:
         return lanes
 
     def _select_by_axis(self, row_value: int, col_value: int) -> int:
-        """Select row or column value according to traversal axis."""
-        return row_value if self.traversal_axis == TraversalAxis.ROW else col_value
+        """Select perpendicular dimension for lane count based on traversal axis.
+
+        When traversing ROWS (horizontal), lanes separate COLUMNS (need col_value-1 lanes).
+        When traversing COLUMNS (vertical), lanes separate ROWS (need row_value-1 lanes).
+        """
+        return col_value if self.traversal_axis == TraversalAxis.ROW else row_value
 
     def _lane_count(self, axis_size: int) -> int:
         """Number of in-between lanes from a single axis size."""
         return max(0, axis_size - 1)
+
+    def _adjacent_lane_indices(self, axis_position: int, lane_count: int) -> List[int]:
+        """Return 1-based lane indices adjacent to a 1-based axis position."""
+        if lane_count <= 0:
+            return []
+
+        return [
+            lane_idx
+            for lane_idx in (axis_position - 1, axis_position)
+            if 1 <= lane_idx <= lane_count
+        ]
 
     def _axis_edges(
         self,

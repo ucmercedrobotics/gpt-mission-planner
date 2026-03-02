@@ -3,8 +3,8 @@
 Convert length-prefixed .bin payloads (JSON) to a KML file.
 
 The .bin format is a stream of 4-byte big-endian length prefixes followed
-by UTF-8 payloads. We scan for JSON payloads containing tree points,
-row waypoints, and perimeter waypoints, then render them into a KML with distinct colors and a
+by UTF-8 payloads. We scan for compact JSON payloads containing tree points
+and row entrances, then render them into a KML with distinct colors and a
 polygon around all points.
 """
 
@@ -65,73 +65,37 @@ def extract_tree_and_row_waypoints(
 ) -> tuple[
     list[dict[str, Any]],
     list[tuple[float, float]],
-    list[tuple[float, float]],
 ]:
     best_points: list[dict[str, Any]] = []
-    row_waypoints: list[tuple[float, float]] = []
     perimeter_waypoints: list[tuple[float, float]] = []
 
     for data in payloads:
-        if not isinstance(data, list) or not data or not isinstance(data[0], dict):
+        if not isinstance(data, dict):
             continue
-
-        points = [item for item in data if is_point_dict(item)]
+        candidate_points = data.get("trees")
+        if not isinstance(candidate_points, list):
+            continue
+        points = [item for item in candidate_points if is_point_dict(item)]
         if not points:
             continue
+        best_points = points
 
-        has_row_waypoints = any(
-            isinstance(item.get("row_waypoints"), list) for item in points
-        )
-
-        if has_row_waypoints:
-            best_points = points
-            break
-
-        # fallback if no row waypoints found anywhere
-        if not best_points:
-            best_points = points
-
-    if best_points:
-        for item in best_points:
-            waypoints = item.get("row_waypoints")
-            if not isinstance(waypoints, list):
-                continue
-            for wp in waypoints:
-                if (
-                    isinstance(wp, (list, tuple))
-                    and len(wp) >= 2
-                    and wp[0] is not None
-                    and wp[1] is not None
-                ):
-                    try:
-                        row_waypoints.append((float(wp[0]), float(wp[1])))
-                    except (TypeError, ValueError):
-                        continue
-
-    if best_points:
-        for item in best_points:
-            pwaypoints = item.get("perimeter_waypoints")
-            if not isinstance(pwaypoints, list):
-                continue
-            for lane in pwaypoints:
-                if not isinstance(lane, dict):
+        row_entrances = data.get("row_entrances")
+        if isinstance(row_entrances, list):
+            for entrance in row_entrances:
+                if not isinstance(entrance, dict):
                     continue
-                for key in ("entry", "exit"):
-                    point = lane.get(key)
-                    if (
-                        isinstance(point, (list, tuple))
-                        and len(point) >= 2
-                        and point[0] is not None
-                        and point[1] is not None
-                    ):
-                        try:
-                            perimeter_waypoints.append(
-                                (float(point[0]), float(point[1]))
-                            )
-                        except (TypeError, ValueError):
-                            continue
+                lat = entrance.get("lat")
+                lon = entrance.get("lon")
+                if lat is None or lon is None:
+                    continue
+                try:
+                    perimeter_waypoints.append((float(lat), float(lon)))
+                except (TypeError, ValueError):
+                    continue
+        break
 
-    return best_points, row_waypoints, perimeter_waypoints
+    return best_points, perimeter_waypoints
 
 
 def apply_offset(
@@ -148,7 +112,6 @@ def apply_offset(
 
 def collect_all_points(
     tree_points: list[dict[str, Any]],
-    row_waypoints: list[tuple[float, float]],
     perimeter_waypoints: list[tuple[float, float]],
 ) -> list[tuple[float, float]]:
     points: list[tuple[float, float]] = []
@@ -157,7 +120,6 @@ def collect_all_points(
             points.append((float(item["lat"]), float(item["lon"])))
         except (TypeError, ValueError, KeyError):
             continue
-    points.extend(row_waypoints)
     points.extend(perimeter_waypoints)
     return points
 
@@ -190,7 +152,6 @@ def convex_hull(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
 
 def build_kml(
     tree_points: list[dict[str, Any]],
-    row_waypoints: list[tuple[float, float]],
     perimeter_waypoints: list[tuple[float, float]],
     polygon_points: list[tuple[float, float]],
     offset_north_m: float,
@@ -208,15 +169,6 @@ def build_kml(
     )
     SubElement(tree_icon_style, "color").text = "ff0000ff"
     SubElement(tree_icon_style, "scale").text = "1.1"
-
-    row_style = SubElement(document, "Style", id="rowStyle")
-    row_icon_style = SubElement(row_style, "IconStyle")
-    row_icon = SubElement(row_icon_style, "Icon")
-    SubElement(row_icon, "href").text = (
-        "http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png"
-    )
-    SubElement(row_icon_style, "color").text = "ff00ff00"
-    SubElement(row_icon_style, "scale").text = "1.0"
 
     perimeter_style = SubElement(document, "Style", id="perimeterStyle")
     perimeter_icon_style = SubElement(perimeter_style, "IconStyle")
@@ -246,16 +198,6 @@ def build_kml(
         name = SubElement(placemark, "name")
         name.text = f"Tree {idx}"
         SubElement(placemark, "styleUrl").text = "#treeStyle"
-        point = SubElement(placemark, "Point")
-        SubElement(point, "coordinates").text = f"{lon},{lat},0"
-
-    # Row waypoints
-    for idx, (lat, lon) in enumerate(row_waypoints, start=1):
-        lat, lon = apply_offset(lat, lon, offset_north_m, offset_east_m)
-        placemark = SubElement(document, "Placemark")
-        name = SubElement(placemark, "name")
-        name.text = f"Row Waypoint {idx}"
-        SubElement(placemark, "styleUrl").text = "#rowStyle"
         point = SubElement(placemark, "Point")
         SubElement(point, "coordinates").text = f"{lon},{lat},0"
 
@@ -299,7 +241,7 @@ def build_kml(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Convert .bin (length-prefixed JSON) to KML with tree/row/perimeter waypoints."
+        description="Convert .bin (length-prefixed JSON) to KML with tree points and row entrances."
     )
     parser.add_argument("input", help="Path to .bin or .json file")
     parser.add_argument("output", help="Path to output .kml file")
@@ -326,19 +268,14 @@ def main() -> int:
     else:
         payloads = list(iter_json_payloads_from_bin(input_path))
 
-    tree_points, row_waypoints, perimeter_waypoints = extract_tree_and_row_waypoints(
-        payloads
-    )
-    if not tree_points and not row_waypoints and not perimeter_waypoints:
-        raise SystemExit(
-            "No tree points, row waypoints, or perimeter waypoints found in input."
-        )
+    tree_points, perimeter_waypoints = extract_tree_and_row_waypoints(payloads)
+    if not tree_points and not perimeter_waypoints:
+        raise SystemExit("No tree points or row entrances found in input.")
 
-    all_points = collect_all_points(tree_points, row_waypoints, perimeter_waypoints)
+    all_points = collect_all_points(tree_points, perimeter_waypoints)
     hull = convex_hull(all_points)
     kml_content = build_kml(
         tree_points,
-        row_waypoints,
         perimeter_waypoints,
         hull,
         args.offset_north_m,

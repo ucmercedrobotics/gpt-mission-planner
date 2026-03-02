@@ -86,12 +86,13 @@ The output of this planner is as follows:
 | 1 | `xml_length` | 4 bytes (uint32, big-endian) | Length of the XML payload in bytes |
 | 2 | `xml_payload` | `xml_length` bytes | Raw XML file bytes |
 | 3 (optional) | `json_length` | 4 bytes (uint32, big-endian) | Length of the JSON payload in bytes (tree points) |
-| 4 (optional) | `json_payload` | `json_length` bytes | UTF-8 JSON array of tree-point dictionaries |
+| 4 (optional) | `json_payload` | `json_length` bytes | UTF-8 JSON compact tree payload with row-indexed entrances |
 
 Notes:
 - If no tree points are sent, only fields 1–2 are transmitted and the socket closes.
 - The receiver detects absence of JSON by `recv` returning empty when attempting the next 4-byte length.
 - JSON is UTF-8; XML is sent as raw bytes.
+- Compact payloads use minimal tree fields (`tree_index,row,col,lat,lon`) and publish row entrances separately via `row_entrances` + `row_to_entrance_indices`.
 
 ## Test
 ```bash

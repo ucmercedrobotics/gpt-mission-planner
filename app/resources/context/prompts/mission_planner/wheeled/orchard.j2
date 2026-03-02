@@ -25,10 +25,12 @@ Grid size:
 
 Total trees: {{ cols }} × {{ rows }} = {{ rows * cols }} trees
 
+Traversal axis: {{ farm_polygon.traversal_axis }}
+
 RULES:
 - Numbering: left-to-right, top-to-bottom
-- You cannot drive through columns of trees
-- If moving between columns, move to the first/last row trees to exit the current column and enter the target column
-- Always plan the full path including every intermediate tree.
+- You CANNOT drive through {{ farm_polygon.traversal_axis }}s of trees
+- If moving between {{ farm_polygon.traversal_axis }}s, use {{ farm_polygon.traversal_axis }} heads instead of tree waypoints.
+- If traversal between trees is long, plan a path that includes intermediate waypoints.
 
 USE THIS INFORMATION TO CREATE THE XML MISSION.

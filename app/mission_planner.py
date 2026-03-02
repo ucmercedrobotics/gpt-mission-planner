@@ -53,13 +53,13 @@ class MissionPlanner:
         # tree placement generator init
         if tpg is not None:
             self.tpg: TreePlacementGenerator = tpg
-            self.tree_points: list[dict[str, Any]] = self.tpg.generate_tree_points()
+            self.tree_points: dict[str, Any] = self.tpg.generate_tree_payload()
         else:
             self.logger.warning(
                 "No tree placement generator found. Assuming non-orchard environment..."
             )
             self.tpg = None
-            self.tree_points = []
+            self.tree_points = {}
         # logging GPT output folder, make if not there
         self.log_directory: str = log_directory
         os.makedirs(self.log_directory, mode=0o777, exist_ok=True)

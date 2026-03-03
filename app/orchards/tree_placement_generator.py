@@ -62,60 +62,42 @@ class TreePlacementGenerator:
         raise ValueError(f"Invalid traversal axis '{axis}'. Must be 'row' or 'column'.")
 
     def generate_tree_payload(self) -> Dict[str, Any]:
-        """Generate compact payload with minimal tree fields and row-indexed entrances."""
+        """Generate compact payload with minimal tree fields and axis-indexed entrances."""
         poly_local, rotation_info = self._build_local_geometry()
         trees = self._generate_minimal_tree_points(
             poly_local, self.dimensions, rotation_info
         )
 
-        rows = len(self.dimensions)
-        lane_count = self._lane_count(rows)
-        original_axis = self.traversal_axis
-        self.traversal_axis = TraversalAxis.ROW
-        try:
-            row_lane_waypoints = self._generate_lane_waypoints(
-                poly_local, self.dimensions, rotation_info
-            )
-        finally:
-            self.traversal_axis = original_axis
+        axis_waypoints = self._generate_lane_waypoints(
+            poly_local, self.dimensions, rotation_info
+        )
 
-        self.perimeter_waypoints = row_lane_waypoints
+        self.perimeter_waypoints = axis_waypoints
 
-        lanes_by_index = {
-            int(lane.get("lane_index")): lane
-            for lane in row_lane_waypoints
-            if isinstance(lane.get("lane_index"), int)
-        }
+        axis_entrances: List[Dict[str, Any]] = []
+        axis_to_entrance_indices: Dict[str, List[int]] = {}
 
-        entrance_points: List[Dict[str, Any]] = []
-        entrance_index_by_point: Dict[Tuple[float, float], int] = {}
-        row_to_entrance_indices: Dict[str, List[int]] = {}
+        for waypoint in axis_waypoints:
+            lane_index = waypoint.get("lane_index")
+            if not isinstance(lane_index, int):
+                continue
 
-        for row_number in range(1, rows + 1):
-            row_entrance_indices: List[int] = []
-            for lane_idx in self._adjacent_lane_indices(row_number, lane_count):
-                lane = lanes_by_index.get(lane_idx)
-                if not lane:
+            lane_entrance_indices: List[int] = []
+            for side in ("entry", "exit"):
+                point = waypoint.get(side)
+                if not isinstance(point, (tuple, list)) or len(point) < 2:
                     continue
-                for side in ("entry", "exit"):
-                    point = lane.get(side)
-                    if not isinstance(point, (tuple, list)) or len(point) < 2:
-                        continue
-                    point_key = (float(point[0]), float(point[1]))
-                    entrance_index = entrance_index_by_point.get(point_key)
-                    if entrance_index is None:
-                        entrance_index = len(entrance_points) + 1
-                        entrance_index_by_point[point_key] = entrance_index
-                        entrance_points.append(
-                            {
-                                "entrance_index": entrance_index,
-                                "lat": point_key[0],
-                                "lon": point_key[1],
-                            }
-                        )
-                    if entrance_index not in row_entrance_indices:
-                        row_entrance_indices.append(entrance_index)
-            row_to_entrance_indices[str(row_number)] = row_entrance_indices
+
+                axis_entrances.append(
+                    {
+                        "entrance_index": len(axis_entrances) + 1,
+                        "lat": float(point[0]),
+                        "lon": float(point[1]),
+                    }
+                )
+                lane_entrance_indices.append(len(axis_entrances))
+
+            axis_to_entrance_indices[str(lane_index)] = lane_entrance_indices
 
         compact_trees = []
         for tree in trees:
@@ -126,13 +108,15 @@ class TreePlacementGenerator:
                     "col": tree["col"],
                     "lat": tree["lat"],
                     "lon": tree["lon"],
+                    "row_waypoints": tree["row_waypoints"],
                 }
             )
 
         payload: Dict[str, Any] = {
+            "traversal_axis": self.traversal_axis.value,
             "trees": compact_trees,
-            "row_entrances": entrance_points,
-            "row_to_entrance_indices": row_to_entrance_indices,
+            "axis_entrances": axis_entrances,
+            "axis_to_entrance_indices": axis_to_entrance_indices,
         }
 
         return payload
@@ -172,6 +156,7 @@ class TreePlacementGenerator:
         rows = len(trees_per_row)
         tree_points: List[Dict[str, Any]] = []
         tree_counter = 1
+        positions: Dict[Tuple[int, int], Tuple[float, float, int]] = {}
 
         for row_index, num_trees in enumerate(trees_per_row):
             t = row_index / (rows - 1) if rows > 1 else 0
@@ -194,9 +179,29 @@ class TreePlacementGenerator:
                         "col": col_index + 1,
                         "lat": lat,
                         "lon": lon,
+                        "row_waypoints": [],
                     }
                 )
+                positions[(row_index, col_index)] = (
+                    x,
+                    y,
+                    len(tree_points) - 1,
+                )
                 tree_counter += 1
+
+        for (row_idx, col_idx), (x, y, idx) in positions.items():
+            next_col_key = (row_idx, col_idx + 1)
+            if next_col_key not in positions:
+                continue
+            next_x, next_y, next_idx = positions[next_col_key]
+            midpoint_x = (x + next_x) / 2
+            midpoint_y = (y + next_y) / 2
+            midpoint_lat, midpoint_lon = self._transform_to_global_coords(
+                midpoint_x, midpoint_y, rotation_info
+            )
+            midpoint = (midpoint_lat, midpoint_lon)
+            tree_points[idx]["row_waypoints"].append(midpoint)
+            tree_points[next_idx]["row_waypoints"].append(midpoint)
 
         return tree_points
 
@@ -302,7 +307,12 @@ class TreePlacementGenerator:
         trees_per_row: List[int],
         rotation_info: Dict[str, float],
     ) -> List[Dict[str, Any]]:
-        """Generate one entry/exit waypoint pair for each in-between row/column lane."""
+        """Generate one entry/exit pair for each aisle centerline.
+
+        Aisles are in-between lines:
+        - ROW traversal -> aisles between columns
+        - COLUMN traversal -> aisles between rows
+        """
         coords = list(poly_local.exterior.coords)
         top_left, top_right, bottom_right, bottom_left = (
             coords[0],
@@ -314,8 +324,8 @@ class TreePlacementGenerator:
         lanes: List[Dict[str, Any]] = []
         rows = len(trees_per_row)
         cols = int(max(trees_per_row)) if len(trees_per_row) > 0 else 0
-        axis_size = self._select_by_axis(rows, cols)
-        lane_count = self._lane_count(axis_size)
+        axis_size = rows if self.traversal_axis == TraversalAxis.ROW else cols
+        lane_count = max(0, axis_size - 1)
 
         if lane_count <= 0:
             return lanes
@@ -350,29 +360,6 @@ class TreePlacementGenerator:
 
         return lanes
 
-    def _select_by_axis(self, row_value: int, col_value: int) -> int:
-        """Select perpendicular dimension for lane count based on traversal axis.
-
-        When traversing ROWS (horizontal), lanes separate COLUMNS (need col_value-1 lanes).
-        When traversing COLUMNS (vertical), lanes separate ROWS (need row_value-1 lanes).
-        """
-        return col_value if self.traversal_axis == TraversalAxis.ROW else row_value
-
-    def _lane_count(self, axis_size: int) -> int:
-        """Number of in-between lanes from a single axis size."""
-        return max(0, axis_size - 1)
-
-    def _adjacent_lane_indices(self, axis_position: int, lane_count: int) -> List[int]:
-        """Return 1-based lane indices adjacent to a 1-based axis position."""
-        if lane_count <= 0:
-            return []
-
-        return [
-            lane_idx
-            for lane_idx in (axis_position - 1, axis_position)
-            if 1 <= lane_idx <= lane_count
-        ]
-
     def _axis_edges(
         self,
         top_left: Tuple[float, float],
@@ -383,7 +370,14 @@ class TreePlacementGenerator:
         Tuple[Tuple[float, float], Tuple[float, float]],
         Tuple[Tuple[float, float], Tuple[float, float]],
     ]:
-        """Return start/end edges to interpolate one lane centerline generically."""
+        """Return interpolation edges for aisle centerlines.
+
+        ROW traversal: aisles are between rows, so each aisle line runs
+        west/east from left to right.
+
+        COLUMN traversal: aisles are between columns, so each aisle line runs
+        north/south from top to bottom.
+        """
         if self.traversal_axis == TraversalAxis.ROW:
             return (top_left, bottom_left), (top_right, bottom_right)
         return (top_left, top_right), (bottom_left, bottom_right)

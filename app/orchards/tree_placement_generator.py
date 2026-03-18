@@ -74,8 +74,8 @@ class TreePlacementGenerator:
 
         self.perimeter_waypoints = axis_waypoints
 
-        axis_entrances: List[Dict[str, Any]] = []
-        axis_to_entrance_indices: Dict[str, List[int]] = {}
+        aisle_entrances: List[Dict[str, Any]] = []
+        aisle_to_entrance_indices: Dict[str, List[int]] = {}
 
         for waypoint in axis_waypoints:
             lane_index = waypoint.get("lane_index")
@@ -88,16 +88,16 @@ class TreePlacementGenerator:
                 if not isinstance(point, (tuple, list)) or len(point) < 2:
                     continue
 
-                axis_entrances.append(
+                aisle_entrances.append(
                     {
-                        "entrance_index": len(axis_entrances) + 1,
+                        "entrance_index": len(aisle_entrances) + 1,
                         "lat": float(point[0]),
                         "lon": float(point[1]),
                     }
                 )
-                lane_entrance_indices.append(len(axis_entrances))
+                lane_entrance_indices.append(len(aisle_entrances))
 
-            axis_to_entrance_indices[str(lane_index)] = lane_entrance_indices
+            aisle_to_entrance_indices[str(lane_index)] = lane_entrance_indices
 
         compact_trees = []
         for tree in trees:
@@ -115,8 +115,8 @@ class TreePlacementGenerator:
         payload: Dict[str, Any] = {
             "traversal_axis": self.traversal_axis.value,
             "trees": compact_trees,
-            "axis_entrances": axis_entrances,
-            "axis_to_entrance_indices": axis_to_entrance_indices,
+            "aisle_entrances": aisle_entrances,
+            "aisle_to_entrance_indices": aisle_to_entrance_indices,
         }
 
         return payload

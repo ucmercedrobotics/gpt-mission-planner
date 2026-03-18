@@ -43,6 +43,7 @@ bash:
 		-v ./schemas/:/${WORKSPACE}/schemas:Z \
 		-v ./scripts/:/${WORKSPACE}/scripts:Z \
 		-v ./logs:/${WORKSPACE}/logs:Z \
+		-v ./test:/${WORKSPACE}/test:Z \
 		--env-file .env \
 		-p ${WEB_PORT}:${WEB_PORT} \
 		-p ${MISSION_PORT}:${MISSION_PORT}/udp \

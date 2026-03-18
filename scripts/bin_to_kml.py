@@ -99,9 +99,9 @@ def extract_tree_and_waypoints(
                 row_waypoint_seen.add(point)
                 row_waypoints.append(point)
 
-        axis_entrances = data.get("axis_entrances")
-        if isinstance(axis_entrances, list):
-            for entrance in axis_entrances:
+        aisle_entrances = data.get("aisle_entrances")
+        if isinstance(aisle_entrances, list):
+            for entrance in aisle_entrances:
                 if not isinstance(entrance, dict):
                     continue
                 lat = entrance.get("lat")

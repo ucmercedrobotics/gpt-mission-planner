@@ -1,5 +1,6 @@
 const schemaSelect = document.getElementById("schema");
 const contextSelect = document.getElementById("context");
+const farmSelect = document.getElementById("farm");
 const promptInput = document.getElementById("prompt");
 let sttOutput = null;
 const resultOutput = document.getElementById("result");
@@ -545,19 +546,56 @@ const fetchContextFiles = async () => {
   try {
     const res = await fetch("/context_files");
     const data = await res.json();
+    const files = Array.isArray(data.files) ? data.files : [];
+    const selected = typeof data.selected === "string" ? data.selected : "";
+
     contextSelect.innerHTML = "";
     const noneOption = document.createElement("option");
     noneOption.value = "";
     noneOption.textContent = "No context";
     contextSelect.appendChild(noneOption);
-    data.files.forEach((file) => {
+    files.forEach((file) => {
       const option = document.createElement("option");
       option.value = file;
       option.textContent = file;
       contextSelect.appendChild(option);
     });
+
+    if (selected && files.includes(selected)) {
+      contextSelect.value = selected;
+    }
   } catch (err) {
     setStatus("Failed to load context files");
+  }
+};
+
+const fetchFarmPolygons = async () => {
+  if (!farmSelect) return;
+  try {
+    const res = await fetch("/farm_polygons");
+    const data = await res.json();
+    const files = Array.isArray(data.files) ? data.files : [];
+    const selected = typeof data.selected === "string" ? data.selected : "";
+
+    farmSelect.innerHTML = "";
+
+    const defaultOption = document.createElement("option");
+    defaultOption.value = "";
+    defaultOption.textContent = "Config default";
+    farmSelect.appendChild(defaultOption);
+
+    files.forEach((file) => {
+      const option = document.createElement("option");
+      option.value = file;
+      option.textContent = file;
+      farmSelect.appendChild(option);
+    });
+
+    if (selected && files.includes(selected)) {
+      farmSelect.value = selected;
+    }
+  } catch (err) {
+    setStatus("Failed to load farm polygons");
   }
 };
 
@@ -581,6 +619,12 @@ const getSelectedContext = () => {
   if (!contextSelect) return [];
   const value = contextSelect.value?.trim();
   return value ? [value] : [];
+};
+
+const getSelectedFarm = () => {
+  if (!farmSelect) return null;
+  const value = farmSelect.value?.trim();
+  return value || null;
 };
 
 const setMicState = (state) => {
@@ -755,6 +799,11 @@ const sendRequest = async ({ audioBlob, includeText = true } = {}) => {
   const selectedContext = getSelectedContext();
   if (selectedContext.length) {
     payload.contextFiles = selectedContext;
+  }
+
+  const selectedFarm = getSelectedFarm();
+  if (selectedFarm) {
+    payload.farmPolygonFile = selectedFarm;
   }
 
   if (!payload.schema) {
@@ -967,6 +1016,7 @@ if (clearAllMissionsBtn) {
 }
 fetchSchemas();
 fetchContextFiles();
+fetchFarmPolygons();
 fetchTcpDefaults();
 initLeafletMap();
 window.addEventListener("resize", scheduleFitToLastBounds);

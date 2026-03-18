@@ -44,8 +44,12 @@ SCHEMAS_DIR = BASE_DIR.parent / "schemas"
 CONTEXT_DIR = BASE_DIR / "resources" / "context"
 PROMPTS_DIR = CONTEXT_DIR / "prompts"
 
-config = "./app/config/localhost.yaml"
-with open(config, "r") as f:
+CONFIG_FILE = "./app/config/localhost.yaml"
+CONFIG_PATH = Path(CONFIG_FILE).resolve()
+CONFIG_DIR = CONFIG_PATH.parent
+FARM_POLYGONS_DIR = CONFIG_DIR / "farm_polygons"
+
+with open(CONFIG_PATH, "r") as f:
     config_yaml = yaml.safe_load(f)
 
 
@@ -61,12 +65,18 @@ def _resolve_config_path(config_path: str, candidate: str) -> Path:
     return (Path(config_path).resolve().parent / candidate_path).resolve()
 
 
-def _load_farm_polygon_from_file(config_data: dict, config_path: str):
-    polygon_file = config_data.get("farm_polygon_file")
-    if not polygon_file:
-        return None, None
-
+def _load_farm_polygon(
+    polygon_file: str, config_path: str, enforce_farm_dir: bool = False
+):
     polygon_path = _resolve_config_path(config_path, polygon_file)
+
+    if enforce_farm_dir and FARM_POLYGONS_DIR not in polygon_path.parents:
+        logger.warning(
+            "Requested farm polygon outside farm_polygons directory: %s",
+            polygon_path,
+        )
+        return None, polygon_path
+
     try:
         with open(polygon_path, "r") as polygon_handle:
             polygon_yaml = yaml.safe_load(polygon_handle)
@@ -85,8 +95,16 @@ def _load_farm_polygon_from_file(config_data: dict, config_path: str):
         return None, polygon_path
 
 
+def _load_farm_polygon_from_file(config_data: dict, config_path: str):
+    polygon_file = config_data.get("farm_polygon_file")
+    if not polygon_file:
+        return None, None
+
+    return _load_farm_polygon(polygon_file, config_path)
+
+
 farm_polygon_from_file, farm_polygon_path = _load_farm_polygon_from_file(
-    config_yaml, config
+    config_yaml, str(CONFIG_PATH)
 )
 if farm_polygon_from_file:
     if "farm_polygon" in config_yaml:
@@ -252,13 +270,36 @@ def _extract_move_to_tree_ids(xml_text: str) -> list[int]:
     return ids
 
 
-def _build_visit_points(
-    tree_points: list[dict[str, Any]], move_ids: list[int]
-) -> list[dict[str, Any]]:
-    index_map = {}
-    for item in tree_points:
+def _get_tree_entries(tree_points: Any) -> list[dict[str, Any]]:
+    if isinstance(tree_points, dict):
+        trees = tree_points.get("trees")
+        if isinstance(trees, list):
+            return [item for item in trees if isinstance(item, dict)]
+        return []
+
+    if isinstance(tree_points, list):
+        return [item for item in tree_points if isinstance(item, dict)]
+
+    return []
+
+
+def _build_tree_points_payload(tree_points: Any) -> list[dict[str, float]]:
+    payload: list[dict[str, float]] = []
+    for item in _get_tree_entries(tree_points):
+        if "lat" not in item or "lon" not in item:
+            continue
         try:
-            tree_index = int(item.get("tree_index"))
+            payload.append({"lat": float(item["lat"]), "lon": float(item["lon"])})
+        except (TypeError, ValueError):
+            continue
+    return payload
+
+
+def _build_visit_points(tree_points: Any, move_ids: list[int]) -> list[dict[str, Any]]:
+    index_map = {}
+    for item in _get_tree_entries(tree_points):
+        try:
+            tree_index = int(item.get("tree_index", item.get("treeIndex")))
         except (TypeError, ValueError):
             continue
         if "lat" in item and "lon" in item:
@@ -391,14 +432,55 @@ async def health():
 @app.get("/context_files")
 async def get_context_files():
     try:
+        selected_context = ""
+        configured_context_files = config_yaml.get("context_files")
+        if isinstance(configured_context_files, str):
+            configured_context_files = [configured_context_files]
+        if isinstance(configured_context_files, list):
+            for configured_file in configured_context_files:
+                if isinstance(configured_file, str) and configured_file.strip():
+                    selected_context = Path(configured_file).name
+                    break
+
         if not PROMPTS_DIR.exists():
-            return {"files": []}
+            return {"files": [], "selected": selected_context}
 
         files = sorted({p.name for p in PROMPTS_DIR.rglob("*") if p.is_file()})
-        return {"files": files}
+        if selected_context and selected_context not in files:
+            selected_context = ""
+
+        return {"files": files, "selected": selected_context}
     except Exception as e:
         logger.error(f"Error getting context files: {e}")
-        return {"files": []}
+        return {"files": [], "selected": ""}
+
+
+@app.get("/farm_polygons")
+async def get_farm_polygons():
+    try:
+        if not FARM_POLYGONS_DIR.exists():
+            return {
+                "files": [],
+                "selected": config_yaml.get("farm_polygon_file"),
+            }
+
+        files = sorted(
+            {
+                str(path.relative_to(CONFIG_DIR)).replace("\\", "/")
+                for path in FARM_POLYGONS_DIR.rglob("*")
+                if path.is_file() and path.suffix.lower() in {".yaml", ".yml"}
+            }
+        )
+        return {
+            "files": files,
+            "selected": config_yaml.get("farm_polygon_file"),
+        }
+    except Exception as e:
+        logger.error(f"Error getting farm polygons: {e}")
+        return {
+            "files": [],
+            "selected": config_yaml.get("farm_polygon_file"),
+        }
 
 
 @app.get("/schemas")
@@ -473,12 +555,8 @@ def get_mission(mission_id: str):
         try:
             with open(tree_path, "r", encoding="utf-8") as f:
                 tree_points = json.load(f)
-            if isinstance(tree_points, list):
-                tree_points_payload = [
-                    {"lat": float(p["lat"]), "lon": float(p["lon"])}
-                    for p in tree_points
-                    if isinstance(p, dict) and "lat" in p and "lon" in p
-                ]
+            tree_points_payload = _build_tree_points_payload(tree_points)
+            if tree_points_payload:
                 move_ids = _extract_move_to_tree_ids(result)
                 visit_points_payload = _build_visit_points(tree_points, move_ids)
         except Exception as exc:
@@ -627,6 +705,7 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
 
         context_files: list[str] = []
         context_vars: dict | None = None
+        request_farm_polygon = config_yaml.get("farm_polygon")
 
         # don't generate/check LTL by default
         ltl: bool = False
@@ -673,19 +752,43 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
             elif "context_files" in config_yaml:
                 context_files.extend(config_yaml["context_files"])
 
-            if "farm_polygon" in config_yaml:
+            requested_farm_polygon_file = data.get("farmPolygonFile")
+            if isinstance(requested_farm_polygon_file, str):
+                requested_farm_polygon_file = requested_farm_polygon_file.strip()
+            else:
+                requested_farm_polygon_file = ""
+
+            if requested_farm_polygon_file:
+                farm_polygon, farm_polygon_path = _load_farm_polygon(
+                    requested_farm_polygon_file,
+                    str(CONFIG_PATH),
+                    enforce_farm_dir=True,
+                )
+                if farm_polygon is None:
+                    yield (
+                        json.dumps(
+                            {
+                                "error": "Invalid farm selection: "
+                                f"{requested_farm_polygon_file}"
+                            }
+                        )
+                        + "\n"
+                    )
+                    return
+                request_farm_polygon = farm_polygon
+                logger.debug("Using requested farm polygon file: %s", farm_polygon_path)
+
+            if request_farm_polygon:
                 tpg = TreePlacementGenerator(
-                    config_yaml["farm_polygon"]["points"],
-                    config_yaml["farm_polygon"]["dimensions"],
-                    perimeter_margin_m=config_yaml["farm_polygon"].get(
+                    request_farm_polygon["points"],
+                    request_farm_polygon["dimensions"],
+                    perimeter_margin_m=request_farm_polygon.get(
                         "perimeter_margin_m", 5.0
                     ),
-                    traversal_axis=config_yaml["farm_polygon"].get(
-                        "traversal_axis", "row"
-                    ),
+                    traversal_axis=request_farm_polygon.get("traversal_axis", "row"),
                 )
                 context_vars = {
-                    "farm_polygon": config_yaml["farm_polygon"],
+                    "farm_polygon": request_farm_polygon,
                 }
                 logger.debug("Farm polygon points defined are: %s", tpg.polygon_coords)
                 logger.debug("Farm dimensions defined are: %s", tpg.dimensions)
@@ -733,11 +836,7 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
         tree_points_payload = None
         visit_points_payload = None
         if hasattr(mp, "tree_points") and mp.tree_points:
-            tree_points_payload = [
-                {"lat": float(p["lat"]), "lon": float(p["lon"])}
-                for p in mp.tree_points
-                if "lat" in p and "lon" in p
-            ]
+            tree_points_payload = _build_tree_points_payload(mp.tree_points)
             move_ids = _extract_move_to_tree_ids(result)
             visit_points_payload = _build_visit_points(mp.tree_points, move_ids)
 

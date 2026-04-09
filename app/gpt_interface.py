@@ -12,6 +12,7 @@ from utils.os_utils import read_file
 OPENAI_TEMP: float = 1.0
 REASONING: str = "medium"
 
+litellm.drop_params=True
 
 class LLMInterface:
     def __init__(
@@ -131,6 +132,7 @@ class LLMInterface:
                     temperature=self.temperature,
                     reasoning_effort=self.reasoning,
                     max_tokens=self.max_tokens,
+                    api_base="http://172.17.0.1:8000/v1"
                 )
                 answered = True
             except litellm.exceptions.RateLimitError as e:

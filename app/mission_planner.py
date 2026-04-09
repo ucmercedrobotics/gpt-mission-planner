@@ -18,10 +18,11 @@ from orchards.tree_placement_generator import TreePlacementGenerator
 OPENAI: str = "openai/gpt-5.2"
 ANTHROPIC: str = "claude-sonnet-4-20250514"
 GEMINI: str = "gemini/gemini-2.5-pro"
+GPTOSS: str = "openai/openai/gpt-oss-20b"
 HUMAN_REVIEW: bool = False
 EXAMPLE_RUNS: int = 5
 # select model
-MODEL: str = OPENAI
+MODEL: str = GPTOSS
 ARBITER: str = ANTHROPIC
 
 

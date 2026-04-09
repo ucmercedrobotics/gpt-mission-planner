@@ -13,7 +13,6 @@ BUILD_SPOT ?= true
 ifneq (,$(filter $(ARCH),arm64 aarch64))
 	PLATFORM := linux/arm64
 	ENABLE_VERIFICATION := false
-	CONFIG := ./app/config/localhost_mac.yaml
 endif
 
 repo-init:

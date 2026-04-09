@@ -441,7 +441,7 @@ async def health():
 async def get_context_files():
     try:
         selected_context = ""
-        configured_context_files = config_yaml.get("context_files")
+        configured_context_files = mission_cfg.get("context_files")
         if isinstance(configured_context_files, str):
             configured_context_files = [configured_context_files]
         if isinstance(configured_context_files, list):
@@ -466,10 +466,11 @@ async def get_context_files():
 @app.get("/farm_polygons")
 async def get_farm_polygons():
     try:
+        selected_polygon = mission_cfg.get("farm", {}).get("polygon_file")
         if not FARM_POLYGONS_DIR.exists():
             return {
                 "files": [],
-                "selected": config_yaml.get("farm_polygon_file"),
+                "selected": selected_polygon,
             }
 
         files = sorted(
@@ -481,13 +482,13 @@ async def get_farm_polygons():
         )
         return {
             "files": files,
-            "selected": config_yaml.get("farm_polygon_file"),
+            "selected": selected_polygon,
         }
     except Exception as e:
         logger.error(f"Error getting farm polygons: {e}")
         return {
             "files": [],
-            "selected": config_yaml.get("farm_polygon_file"),
+            "selected": mission_cfg.get("farm", {}).get("polygon_file"),
         }
 
 

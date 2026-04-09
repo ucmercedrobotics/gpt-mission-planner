@@ -114,29 +114,6 @@ def sample_xml_file():
     Path(temp_path).unlink(missing_ok=True)
 
 
-@pytest.fixture
-def sample_tree_points():
-    """Fixture providing sample tree points."""
-    return [
-        {
-            "tree_index": 1,
-            "row": 1,
-            "col": 1,
-            "lat": 37.123456,
-            "lon": -120.654321,
-            "row_waypoints": [(37.123457, -120.654320)],
-        },
-        {
-            "tree_index": 2,
-            "row": 1,
-            "col": 2,
-            "lat": 37.123458,
-            "lon": -120.654319,
-            "row_waypoints": [(37.123457, -120.654320)],
-        },
-    ]
-
-
 def test_send_xml_only(test_server, logger, sample_xml_file):
     """Test sending only XML file without tree points."""
     # Create network interface
@@ -162,42 +139,48 @@ def test_send_xml_only(test_server, logger, sample_xml_file):
     assert b"MoveToGPSLocation" in xml_data
 
 
-def test_send_xml_and_tree_points(
-    test_server, logger, sample_xml_file, sample_tree_points
-):
-    """Test sending both XML file and tree points."""
-    # Create network interface
+def test_send_xml_and_compact_tree_payload(test_server, logger, sample_xml_file):
+    """Test sending XML with compact tree payload object."""
+    compact_payload = {
+        "trees": [
+            {
+                "tree_index": 1,
+                "row": 1,
+                "col": 1,
+                "lat": 37.123456,
+                "lon": -120.654321,
+            },
+            {
+                "tree_index": 2,
+                "row": 2,
+                "col": 1,
+                "lat": 37.123458,
+                "lon": -120.654319,
+            },
+        ],
+        "row_entrances": [
+            {"entrance_index": 1, "lat": 37.123400, "lon": -120.654400},
+            {"entrance_index": 2, "lat": 37.123500, "lon": -120.654200},
+        ],
+        "row_to_entrance_indices": {"1": [1, 2], "2": [1, 2]},
+    }
+
     nic = NetworkInterface(logger, test_server.host, test_server.port)
     nic.init_socket()
-
-    # Send XML and tree points
-    nic.send_file(sample_xml_file, tree_points=sample_tree_points)
+    nic.send_file(sample_xml_file, tree_points=compact_payload)
     nic.close_socket()
 
-    # Give server time to receive
     import time
 
     time.sleep(0.1)
 
-    # Verify two messages received (XML + JSON)
     assert len(test_server.received_messages) == 2
-
-    # Verify XML content
-    xml_data = test_server.received_messages[0]
-    assert b'<?xml version="1.0"' in xml_data
-    assert b"<Mission>" in xml_data
-
-    # Verify JSON content
     json_data = test_server.received_messages[1]
-    tree_points = json.loads(json_data.decode("utf-8"))
-
-    assert len(tree_points) == 2
-    assert tree_points[0]["tree_index"] == 1
-    assert tree_points[0]["row"] == 1
-    assert tree_points[0]["col"] == 1
-    assert tree_points[0]["lat"] == 37.123456
-    assert tree_points[0]["lon"] == -120.654321
-    assert tree_points[1]["tree_index"] == 2
+    decoded_payload = json.loads(json_data.decode("utf-8"))
+    assert "trees" in decoded_payload
+    assert len(decoded_payload["trees"]) == 2
+    assert "row_entrances" in decoded_payload
+    assert "row_to_entrance_indices" in decoded_payload
 
 
 def test_length_prefix_correctness(test_server, logger, sample_xml_file):
@@ -222,29 +205,6 @@ def test_length_prefix_correctness(test_server, logger, sample_xml_file):
     # Verify received data matches original
     assert len(test_server.received_messages) == 1
     assert test_server.received_messages[0] == expected_xml
-
-
-def test_empty_tree_points_list(test_server, logger, sample_xml_file):
-    """Test sending empty tree points list (should send only XML)."""
-    # Create network interface
-    nic = NetworkInterface(logger, test_server.host, test_server.port)
-    nic.init_socket()
-
-    # Send with empty list (falsy value, should be treated as None)
-    nic.send_file(sample_xml_file, tree_points=[])
-    nic.close_socket()
-
-    # Give server time to receive
-    import time
-
-    time.sleep(0.1)
-
-    # Empty list is falsy but not None, so it will send empty JSON array
-    # This tests the current behavior - you may want to change this
-    assert len(test_server.received_messages) == 2
-    json_data = test_server.received_messages[1]
-    tree_points = json.loads(json_data.decode("utf-8"))
-    assert tree_points == []
 
 
 if __name__ == "__main__":

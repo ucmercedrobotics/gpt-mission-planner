@@ -2,7 +2,7 @@ import socket
 import logging
 import struct
 import json
-from typing import Optional
+from typing import Optional, Any
 
 
 class NetworkInterface:
@@ -35,15 +35,19 @@ class NetworkInterface:
         self._send_length_prefixed_data(xml_data)
         self.logger.debug(f"XML file sent successfully ({len(xml_data)} bytes).")
 
-    def send_tree_points(self, tree_points: list) -> None:
-        """Send tree points dictionary as JSON with length prefix."""
+    def send_tree_points(self, tree_points: dict[str, Any]) -> None:
+        """Send tree-point payload as JSON with length prefix."""
         json_data = json.dumps(tree_points).encode("utf-8")
         self._send_length_prefixed_data(json_data)
+        tree_count = len(tree_points.get("trees", []))
+
         self.logger.debug(
-            f"Tree points sent successfully ({len(tree_points)} trees, {len(json_data)} bytes)."
+            f"Tree points sent successfully ({tree_count} trees, {len(json_data)} bytes)."
         )
 
-    def send_file(self, file_path: str, tree_points: Optional[list] = None) -> None:
+    def send_file(
+        self, file_path: str, tree_points: Optional[dict[str, Any]] = None
+    ) -> None:
         """Send XML file and optionally tree points, both with length prefixes."""
         self.send_xml_file(file_path)
         if tree_points is not None:

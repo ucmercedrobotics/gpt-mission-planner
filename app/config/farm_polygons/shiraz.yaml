@@ -14,3 +14,4 @@ points:
 dimensions:
   - row: 4
     col: 3
+traversal_axis: "column"

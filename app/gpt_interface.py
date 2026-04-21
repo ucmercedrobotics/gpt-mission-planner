@@ -12,6 +12,7 @@ from utils.os_utils import read_file
 OPENAI_TEMP: float = 1.0
 REASONING: str = "medium"
 
+litellm.drop_params=True
 
 class LLMInterface:
     def __init__(
@@ -22,6 +23,7 @@ class LLMInterface:
         max_tokens: int = 2000,
         temperature: float = 0.2,
         context_template: str = "tfr_2026",
+        api_base: str|None = None,
     ):
         self.logger: logging.Logger = logger
         # max number of tokens that GPT will respond with, almost 1:1 with words to token
@@ -37,6 +39,7 @@ class LLMInterface:
         self.promela_template: str = ""
         self.context_template: str = context_template
         self.temperature: float = temperature
+        self.api_base: str | None = api_base
         self.reasoning: str | None = None
         if "openai" in self.model:
             self.logger.warning(
@@ -131,6 +134,7 @@ class LLMInterface:
                     temperature=self.temperature,
                     reasoning_effort=self.reasoning,
                     max_tokens=self.max_tokens,
+                    api_base=self.api_base
                 )
                 answered = True
             except litellm.exceptions.RateLimitError as e:

@@ -1,16 +1,13 @@
 import logging
 from pathlib import Path
+from typing import Any
 
 import yaml
 import click
 
-from mission_planner import MissionPlanner
+from mission_planner import MissionPlanner, MissionPlannerConfig, ModelRoutingConfig
 from orchards.tree_placement_generator import TreePlacementGenerator
 from network_interface import NetworkInterface
-
-LTL_KEY: str = "ltl"
-PROMELA_TEMPLATE_KEY: str = "promela_template"
-SPIN_PATH_KEY: str = "spin_path"
 
 
 @click.command()
@@ -35,17 +32,27 @@ def main(config: str):
     with open(config_path, "r") as file:
         config_yaml: dict = yaml.safe_load(file)
 
-    context_files: list[str] = []
+    mission_cfg: dict[str, Any] = config_yaml["mission"]
+    planner_cfg: dict[str, Any] = config_yaml["planner"]
+    generation_cfg: dict[str, Any] = planner_cfg["generation"]
+    validation_cfg: dict[str, Any] = planner_cfg["validation"]
+    verification_cfg: dict[str, Any] = planner_cfg["formal_verification"]
+    llm_cfg: dict[str, Any] = config_yaml["llm"]
+    routing_cfg: dict[str, Any] = llm_cfg["routing"]
+    endpoints_cfg: dict[str, Any] = llm_cfg["endpoints"]
+    network_cfg: dict[str, Any] = config_yaml["network"]["tcp"]
+
+    context_files: list[str] = mission_cfg.get("context_files", [])
     context_vars: dict | None = None
 
-    # don't generate/check LTL by default
-    ltl: bool = False
-    pml_template_path: str = ""
-    spin_path: str = ""
+    ltl: bool = bool(validation_cfg.get("ltl_enabled", False))
+    pml_template_path: str = str(verification_cfg.get("promela_template", ""))
+    spin_path: str = str(verification_cfg.get("spin_path", ""))
 
     try:
         # configure logger
-        logging.basicConfig(level=logging._nameToLevel[config_yaml["logging"]])
+        logging_level = str(config_yaml["logging"]["level"])
+        logging.basicConfig(level=logging._nameToLevel[logging_level])
         # OpenAI loggers turned off completely.
         logging.getLogger("openai").setLevel(logging.CRITICAL)
         logging.getLogger("anthropic").setLevel(logging.CRITICAL)
@@ -54,13 +61,9 @@ def main(config: str):
         logging.getLogger("httpcore").setLevel(logging.CRITICAL)
         logger: logging.Logger = logging.getLogger()
 
-        # you don't necessarily need context
-        if "context_files" in config_yaml:
-            context_files = config_yaml["context_files"]
-        else:
-            logger.warning("No additional context files found. Proceeding...")
         farm_polygon = None
-        farm_polygon_file = config_yaml.get("farm_polygon_file")
+        farm_cfg = mission_cfg.get("farm", {})
+        farm_polygon_file = farm_cfg.get("polygon_file")
         if farm_polygon_file:
             polygon_path = resolve_config_candidate(farm_polygon_file)
             try:
@@ -78,7 +81,7 @@ def main(config: str):
                 logger.warning("Improper farm polygon YAML: %s", exc)
 
         if farm_polygon is None:
-            farm_polygon = config_yaml.get("farm_polygon")
+            farm_polygon = farm_cfg.get("polygon")
 
         if farm_polygon:
             tpg = TreePlacementGenerator(
@@ -98,36 +101,77 @@ def main(config: str):
                 "No farm polygon found. Assuming we're not dealing with an orchard grid..."
             )
 
-        # if user specifies config key -> optional keys
-        ltl = config_yaml.get(LTL_KEY) or False
-        pml_template_path = config_yaml.get(PROMELA_TEMPLATE_KEY) or ""
-        spin_path = config_yaml.get(SPIN_PATH_KEY) or ""
         if ltl and not (pml_template_path and spin_path):
             ltl = False
             logger.warning(
                 "No spin configuration found. Proceeding without formal verification..."
             )
 
+        routing_mode = str(routing_cfg.get("mode", "online")).lower()
+        online_model = str(routing_cfg["online_model"])
+        offline_model = routing_cfg.get("offline_model")
+        online_api_base = endpoints_cfg.get("online_api_base")
+        offline_api_base = endpoints_cfg.get("offline_api_base")
+
+        if routing_mode == "auto":
+            selected_model = online_model
+            selected_api_base = online_api_base
+            auto_toggle = True
+            local_model = offline_model
+            local_api_base = offline_api_base
+        elif routing_mode == "online":
+            selected_model = online_model
+            selected_api_base = online_api_base
+            auto_toggle = False
+            local_model = None
+            local_api_base = None
+        elif routing_mode == "offline":
+            if offline_model is None:
+                logger.warning(
+                    "llm.routing.mode=offline but no offline_model provided. Falling back to online_model."
+                )
+            selected_model = offline_model or online_model
+            selected_api_base = offline_api_base
+            auto_toggle = False
+            local_model = None
+            local_api_base = None
+        else:
+            raise ValueError(
+                "Invalid llm.routing.mode '%s'. Supported values: auto, online, offline"
+                % routing_mode
+            )
+
+        planner_config = MissionPlannerConfig(
+            token_path=config_yaml["auth"]["token_env_file"],
+            schema_paths=mission_cfg["schema_paths"],
+            lint_xml=bool(validation_cfg.get("lint_xml", True)),
+            max_retries=int(planner_cfg["retries"]["max"]),
+            max_tokens=int(generation_cfg["max_tokens"]),
+            temperature=float(generation_cfg["temperature"]),
+            ltl=ltl,
+            promela_template_path=pml_template_path,
+            spin_path=spin_path,
+            log_directory=mission_cfg["log_directory"],
+            model_routing=ModelRoutingConfig(
+                model=selected_model,
+                api_base=selected_api_base,
+                auto_model_toggle=auto_toggle,
+                local_model=local_model,
+                local_api_base=local_api_base,
+            ),
+        )
+
         mp: MissionPlanner = MissionPlanner(
-            config_yaml["token"],
-            config_yaml["schema"],
-            config_yaml.get("lint_xml", True),
+            planner_config,
             context_files,
             tpg,
-            config_yaml["max_retries"],
-            config_yaml["max_tokens"],
-            config_yaml["temperature"],
-            ltl,
-            pml_template_path,
-            spin_path,
-            config_yaml["log_directory"],
             logger,
             context_vars,
         )
     except yaml.YAMLError as exc:
         logger.error(f"Improper YAML config: {exc}")
 
-    nic = NetworkInterface(logger, config_yaml["host"], int(config_yaml["port"]))
+    nic = NetworkInterface(logger, network_cfg["host"], int(network_cfg["port"]))
 
     while True:
         mp_input = input("Enter the specifications for your mission plan: ")

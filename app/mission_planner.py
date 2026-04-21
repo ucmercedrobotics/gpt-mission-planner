@@ -1,5 +1,7 @@
 import logging
 import os
+import socket
+from dataclasses import dataclass, field
 from typing import Tuple, Any
 
 from gpt_interface import LLMInterface
@@ -18,36 +20,58 @@ from orchards.tree_placement_generator import TreePlacementGenerator
 OPENAI: str = "openai/gpt-5.2"
 ANTHROPIC: str = "claude-sonnet-4-20250514"
 GEMINI: str = "gemini/gemini-2.5-pro"
+GPTOSS: str = "openai/openai/gpt-oss-20b"
 HUMAN_REVIEW: bool = False
 EXAMPLE_RUNS: int = 5
 # select model
-MODEL: str = OPENAI
+MODEL: str = GPTOSS
 ARBITER: str = ANTHROPIC
+INTERNET_CHECK_HOST: str = "1.1.1.1"
+INTERNET_CHECK_PORT: int = 53
+INTERNET_CHECK_TIMEOUT: float = 1.5
+
+
+@dataclass
+class ModelRoutingConfig:
+    model: str = MODEL
+    api_base: str | None = None
+    auto_model_toggle: bool = False
+    cloud_model: str | None = None
+    cloud_api_base: str | None = None
+    local_model: str | None = None
+    local_api_base: str | None = None
+
+
+@dataclass
+class MissionPlannerConfig:
+    token_path: str
+    schema_paths: list[str]
+    lint_xml: bool
+    max_retries: int
+    max_tokens: int
+    temperature: float
+    ltl: bool
+    promela_template_path: str
+    spin_path: str
+    log_directory: str
+    model_routing: ModelRoutingConfig = field(default_factory=ModelRoutingConfig)
 
 
 class MissionPlanner:
     def __init__(
         self,
-        token_path: str,
-        schema_paths: list[str],
-        lint_xml: bool,
+        config: MissionPlannerConfig,
         context_files: list[str],
         tpg: TreePlacementGenerator,
-        max_retries: int,
-        max_tokens: int,
-        temperature: float,
-        ltl: bool,
-        promela_template_path: str,
-        spin_path: str,
-        log_directory: str,
         logger: logging.Logger,
         context_vars: dict | None = None,
     ):
         # logger instance
         self.logger: logging.Logger = logger
+        self.config: MissionPlannerConfig = config
         # set schema and farm file paths
-        self.schema_paths: list[str] = schema_paths
-        self.lint_xml: bool = lint_xml
+        self.schema_paths: list[str] = self.config.schema_paths
+        self.lint_xml: bool = self.config.lint_xml
         self.context_files: list[str] = context_files
         self.context_vars: dict | None = context_vars
         # tree placement generator init
@@ -61,22 +85,48 @@ class MissionPlanner:
             self.tpg = None
             self.tree_points = {}
         # logging GPT output folder, make if not there
-        self.log_directory: str = log_directory
+        self.log_directory: str = self.config.log_directory
         os.makedirs(self.log_directory, mode=0o777, exist_ok=True)
         # keeping track of validation status
         self.xml_valid: bool = False
         self.ltl_valid: bool = False
         # max number of times that GPT can try and fix the mission plan
-        self.max_retries: int = max_retries
+        self.max_retries: int = self.config.max_retries
         # retry count, managed globally to track all failures
         self.retry: int = -1
+        model_routing = self.config.model_routing
+        selected_model: str = model_routing.model
+        selected_api_base: str | None = model_routing.api_base
+        if model_routing.auto_model_toggle:
+            is_online = self._internet_available()
+            if is_online:
+                selected_model = model_routing.cloud_model or model_routing.model
+                selected_api_base = model_routing.cloud_api_base
+                self.logger.info(
+                    "Internet reachable. Using cloud model '%s'", selected_model
+                )
+            else:
+                selected_model = model_routing.local_model or model_routing.model
+                selected_api_base = (
+                    model_routing.local_api_base
+                    if model_routing.local_api_base is not None
+                    else model_routing.api_base
+                )
+                self.logger.warning(
+                    "Internet unavailable. Using local model '%s'", selected_model
+                )
         # init gpt interface
         self.gpt: LLMInterface = LLMInterface(
-            self.logger, token_path, MODEL, max_tokens, temperature=temperature
+            self.logger,
+            self.config.token_path,
+            selected_model,
+            self.config.max_tokens,
+            temperature=self.config.temperature,
+            api_base=selected_api_base,
         )
         self.gpt.init_context(self.schema_paths, self.context_files, self.context_vars)
         # init Promela compiler
-        self.ltl: bool = ltl
+        self.ltl: bool = self.config.ltl
         if self.ltl:
             from promela_compiler import PromelaCompiler
 
@@ -84,20 +134,25 @@ class MissionPlanner:
             self.human_review: bool = HUMAN_REVIEW
             # init XML mission gpt interface
             self.pml_gpt: LLMInterface = LLMInterface(
-                self.logger, token_path, MODEL, max_tokens, temperature=temperature
+                self.logger,
+                self.config.token_path,
+                selected_model,
+                self.config.max_tokens,
+                temperature=self.config.temperature,
+                api_base=selected_api_base,
             )
             # Claude human verification substitute
             self.verification_checker: LLMInterface = LLMInterface(
                 self.logger,
-                token_path,
+                self.config.token_path,
                 ARBITER,
-                max_tokens,
-                temperature=temperature,
+                self.config.max_tokens,
+                temperature=self.config.temperature,
                 context_template="verification_agent",
             )
             # object for compiling Promela from XML
             self.promela: PromelaCompiler = PromelaCompiler(
-                promela_template_path, self.logger
+                self.config.promela_template_path, self.logger
             )
             # setup context to give to formal verification agent.
             # NOTE: only schemas and template used for now
@@ -110,11 +165,27 @@ class MissionPlanner:
             # this string gets generated at a later time when promela is written out
             self.promela_path: str = ""
             # spin binary location
-            self.spin_path: str = spin_path
+            self.spin_path: str = self.config.spin_path
             # configure spot
             import spot
 
             spot.setup()
+
+    def _internet_available(self) -> bool:
+        try:
+            with socket.create_connection(
+                (INTERNET_CHECK_HOST, INTERNET_CHECK_PORT),
+                timeout=INTERNET_CHECK_TIMEOUT,
+            ):
+                return True
+        except OSError as exc:
+            self.logger.debug(
+                "Internet connectivity check failed for %s:%s - %s",
+                INTERNET_CHECK_HOST,
+                INTERNET_CHECK_PORT,
+                exc,
+            )
+            return False
 
     def get_promela_output_path(self) -> str:
         return self.promela_path

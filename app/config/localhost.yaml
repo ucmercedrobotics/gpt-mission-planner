@@ -1,27 +1,42 @@
-logging: DEBUG
-# API tokens
-token: ".env"
-# max number of retries to get a valid mission plan from ChatGPT
-max_retries: 10
-max_tokens: 10000
-temperature: 0.2
-log_directory: "./app/gpt_outputs/tfr"
-schema:
-  - "schemas/amiga_btcpp.xsd"
-  # - "schemas/clearpath_husky.xsd"
-# NOTE: this is only for backwards compat when we change schema formats
-lint_xml: True
-context_files:
-  # - "./app/resources/context/prompts/mission_planner/wheeled/greece.j2"
-  - "./app/resources/context/prompts/mission_planner/wheeled/orchard.j2"
-  # - "./app/resources/context/prompts/mission_planner/wheeled/thompson_rows.j2"
-# Farm polygon can be inlined or loaded from a separate YAML file.
-# farm_polygon_file: "farm_polygons/castle.yaml"
-# farm_polygon_file: "farm_polygons/shiraz.yaml"
-farm_polygon_file: "farm_polygons/reza_medium.yaml"
-host: 172.17.0.1
-port: 12346
-# LTL generation?
-ltl: False
-promela_template: "app/resources/context/formal_verification/promela_template.txt"
-spin_path: "spin"
+logging:
+  level: DEBUG
+
+auth:
+  token_env_file: ".env"
+
+planner:
+  retries:
+    max: 10
+  generation:
+    max_tokens: 10000
+    temperature: 0.2
+  validation:
+    lint_xml: true
+    ltl_enabled: false
+  formal_verification:
+    promela_template: "app/resources/context/formal_verification/promela_template.txt"
+    spin_path: "spin"
+
+llm:
+  routing:
+    # supported modes: auto, online, offline
+    mode: offline
+    online_model: "openai/gpt-5.2"
+    offline_model: "openai/openai/gpt-oss-20b"
+  endpoints:
+    online_api_base: null
+    offline_api_base: "http://172.17.0.1:8000/v1"
+
+mission:
+  log_directory: "./app/gpt_outputs/tfr"
+  schema_paths:
+    - "schemas/amiga_btcpp.xsd"
+  context_files:
+    - "./app/resources/context/prompts/mission_planner/wheeled/orchard.j2"
+  farm:
+    polygon_file: "farm_polygons/reza_medium.yaml"
+
+network:
+  tcp:
+    host: 172.17.0.1
+    port: 12346

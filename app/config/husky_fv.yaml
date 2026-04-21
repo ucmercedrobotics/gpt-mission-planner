@@ -1,31 +1,40 @@
-logging: DEBUG
-# OpenAI API token
-token: ".env"
-# max number of retries to get a valid mission plan from ChatGPT
-max_retries: 10
-# config for GPT
-max_tokens: 4096
-temperature: 0.2
-# where to store results
-log_directory: "./app/gpt_outputs/iros_experiments/4o"
-# schema per 1872.1-2024 + farm layout
-schema:
-  - "schemas/clearpath_husky.xsd"
-context_files:
-  - "./app/resources/context/sites/reza/geojson/reza_small.geojson"
-  # - "./app/resources/context/sites/reza/geojson/reza_medium.geojson"
-  # - "app/resources/context/sites/ucm/geojson/ucm_graph20.geojson"
-farm_polygon:
-  top_left: [-120.42079453, 37.26643908]
-  top_right: [-120.42012318, 37.26644777]
-  bottom_right: [-120.42011635, 37.26578860]
-  bottom_left: [-120.42079999, 37.26578751]
-  rows: 18
-  cols: 8
-# who to send this to?
-host: 172.17.0.1
-port: 12346
-# LTL generation?
-ltl: true
-promela_template: "app/resources/context/formal_verification/promela_template.txt"
-spin_path: "spin"
+logging:
+  level: DEBUG
+
+auth:
+  token_env_file: ".env"
+
+planner:
+  retries:
+    max: 10
+  generation:
+    max_tokens: 4096
+    temperature: 0.2
+  validation:
+    lint_xml: true
+    ltl_enabled: true
+  formal_verification:
+    promela_template: "app/resources/context/formal_verification/promela_template.txt"
+    spin_path: "spin"
+
+llm:
+  routing:
+    mode: online
+    online_model: "openai/gpt-5.2"
+  endpoints:
+    online_api_base: null
+    offline_api_base: null
+
+mission:
+  log_directory: "./app/gpt_outputs/iros_experiments/4o"
+  schema_paths:
+    - "schemas/clearpath_husky.xsd"
+  context_files:
+    - "./app/resources/context/sites/reza/geojson/reza_small.geojson"
+  farm:
+    polygon_file: "farm_polygons/reza_medium.yaml"
+
+network:
+  tcp:
+    host: 172.17.0.1
+    port: 12346

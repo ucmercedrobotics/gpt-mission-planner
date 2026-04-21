@@ -22,15 +22,11 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from mission_planner import MissionPlanner
+from mission_planner import MissionPlanner, MissionPlannerConfig, ModelRoutingConfig
 from network_interface import NetworkInterface
 from orchards.tree_placement_generator import TreePlacementGenerator
 
 load_dotenv()
-
-LTL_KEY: str = "ltl"
-PROMELA_TEMPLATE_KEY: str = "promela_template"
-SPIN_PATH_KEY: str = "spin_path"
 
 host = os.getenv("HOST", "127.0.0.1")
 port = int(os.getenv("PORT", 8002))
@@ -51,6 +47,16 @@ FARM_POLYGONS_DIR = CONFIG_DIR / "farm_polygons"
 
 with open(CONFIG_PATH, "r") as f:
     config_yaml = yaml.safe_load(f)
+
+mission_cfg: dict[str, Any] = config_yaml["mission"]
+planner_cfg: dict[str, Any] = config_yaml["planner"]
+generation_cfg: dict[str, Any] = planner_cfg["generation"]
+validation_cfg: dict[str, Any] = planner_cfg["validation"]
+verification_cfg: dict[str, Any] = planner_cfg["formal_verification"]
+llm_cfg: dict[str, Any] = config_yaml["llm"]
+routing_cfg: dict[str, Any] = llm_cfg["routing"]
+endpoints_cfg: dict[str, Any] = llm_cfg["endpoints"]
+network_cfg: dict[str, Any] = config_yaml["network"]["tcp"]
 
 
 def _resolve_config_path(config_path: str, candidate: str) -> Path:
@@ -96,7 +102,8 @@ def _load_farm_polygon(
 
 
 def _load_farm_polygon_from_file(config_data: dict, config_path: str):
-    polygon_file = config_data.get("farm_polygon_file")
+    farm_cfg = config_data.get("mission", {}).get("farm", {})
+    polygon_file = farm_cfg.get("polygon_file")
     if not polygon_file:
         return None, None
 
@@ -107,14 +114,15 @@ farm_polygon_from_file, farm_polygon_path = _load_farm_polygon_from_file(
     config_yaml, str(CONFIG_PATH)
 )
 if farm_polygon_from_file:
-    if "farm_polygon" in config_yaml:
+    farm_cfg = config_yaml["mission"].setdefault("farm", {})
+    if "polygon" in farm_cfg:
         logger.info(
-            "Using farm polygon from file %s; ignoring inline farm_polygon",
+            "Using farm polygon from file %s; ignoring inline mission.farm.polygon",
             farm_polygon_path,
         )
-    config_yaml["farm_polygon"] = farm_polygon_from_file
+    farm_cfg["polygon"] = farm_polygon_from_file
 
-logging_level = config_yaml.get("logging", "INFO")
+logging_level = config_yaml.get("logging", {}).get("level", "INFO")
 logging.getLogger().setLevel(logging._nameToLevel.get(logging_level, logging.INFO))
 logger.setLevel(logging._nameToLevel.get(logging_level, logging.INFO))
 
@@ -433,7 +441,7 @@ async def health():
 async def get_context_files():
     try:
         selected_context = ""
-        configured_context_files = config_yaml.get("context_files")
+        configured_context_files = mission_cfg.get("context_files")
         if isinstance(configured_context_files, str):
             configured_context_files = [configured_context_files]
         if isinstance(configured_context_files, list):
@@ -458,10 +466,11 @@ async def get_context_files():
 @app.get("/farm_polygons")
 async def get_farm_polygons():
     try:
+        selected_polygon = mission_cfg.get("farm", {}).get("polygon_file")
         if not FARM_POLYGONS_DIR.exists():
             return {
                 "files": [],
-                "selected": config_yaml.get("farm_polygon_file"),
+                "selected": selected_polygon,
             }
 
         files = sorted(
@@ -473,13 +482,13 @@ async def get_farm_polygons():
         )
         return {
             "files": files,
-            "selected": config_yaml.get("farm_polygon_file"),
+            "selected": selected_polygon,
         }
     except Exception as e:
         logger.error(f"Error getting farm polygons: {e}")
         return {
             "files": [],
-            "selected": config_yaml.get("farm_polygon_file"),
+            "selected": mission_cfg.get("farm", {}).get("polygon_file"),
         }
 
 
@@ -498,13 +507,13 @@ async def get_schemas():
 
 @app.get("/tcp_defaults")
 def get_tcp_defaults(request: Request):
-    config_host = str(config_yaml.get("host", "127.0.0.1"))
+    config_host = str(network_cfg.get("host", "127.0.0.1"))
     default_host = config_host
     if config_host in {"127.0.0.1", "localhost"} and request.client:
         default_host = request.client.host
     return {
         "host": default_host,
-        "port": int(config_yaml.get("port", 12345)),
+        "port": int(network_cfg.get("port", 12345)),
     }
 
 
@@ -589,11 +598,11 @@ def send_mission(
             logger.warning("Failed reading tree points for %s: %s", mission_id, exc)
 
     try:
-        config_host = config_yaml.get("host", "127.0.0.1")
+        config_host = network_cfg.get("host", "127.0.0.1")
         tcp_host = payload.get("tcpHost") or config_host
         if tcp_host in {"127.0.0.1", "localhost"} and request.client:
             tcp_host = request.client.host
-        tcp_port_raw = payload.get("tcpPort") or config_yaml.get("port", 12345)
+        tcp_port_raw = payload.get("tcpPort") or network_cfg.get("port", 12345)
         tcp_port = int(tcp_port_raw)
         nic = NetworkInterface(logger, tcp_host, tcp_port)
         nic.init_socket()
@@ -705,12 +714,11 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
 
         context_files: list[str] = []
         context_vars: dict | None = None
-        request_farm_polygon = config_yaml.get("farm_polygon")
+        request_farm_polygon = mission_cfg.get("farm", {}).get("polygon")
 
-        # don't generate/check LTL by default
-        ltl: bool = False
-        pml_template_path: str = ""
-        spin_path: str = ""
+        ltl: bool = bool(validation_cfg.get("ltl_enabled", False))
+        pml_template_path: str = str(verification_cfg.get("promela_template", ""))
+        spin_path: str = str(verification_cfg.get("spin_path", ""))
 
         try:
             if "contextFiles" in data:
@@ -749,8 +757,8 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
                         )
                     context_files.append(str(matches[0].resolve()))
 
-            elif "context_files" in config_yaml:
-                context_files.extend(config_yaml["context_files"])
+            else:
+                context_files.extend(mission_cfg.get("context_files", []))
 
             requested_farm_polygon_file = data.get("farmPolygonFile")
             if isinstance(requested_farm_polygon_file, str):
@@ -798,31 +806,71 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
                     "No farm polygon found. Assuming we're not dealing with an orchard grid..."
                 )
 
-            lint_xml = data.get("lintXml", config_yaml.get("lint_xml", True))
-
-            # if user specifies config key -> optional keys
-            ltl = config_yaml.get(LTL_KEY) or False
-            pml_template_path = config_yaml.get(PROMELA_TEMPLATE_KEY) or ""
-            spin_path = config_yaml.get(SPIN_PATH_KEY) or ""
+            lint_xml = data.get("lintXml", validation_cfg.get("lint_xml", True))
             if ltl and not (pml_template_path and spin_path):
                 ltl = False
                 logger.warning(
                     "No spin configuration found. Proceeding without formal verification..."
                 )
 
+            routing_mode = str(routing_cfg.get("mode", "online")).lower()
+            online_model = str(routing_cfg["online_model"])
+            offline_model = routing_cfg.get("offline_model")
+            online_api_base = endpoints_cfg.get("online_api_base")
+            offline_api_base = endpoints_cfg.get("offline_api_base")
+
+            if routing_mode == "auto":
+                selected_model = online_model
+                selected_api_base = online_api_base
+                auto_toggle = True
+                local_model = offline_model
+                local_api_base = offline_api_base
+            elif routing_mode == "online":
+                selected_model = online_model
+                selected_api_base = online_api_base
+                auto_toggle = False
+                local_model = None
+                local_api_base = None
+            elif routing_mode == "offline":
+                if offline_model is None:
+                    logger.warning(
+                        "llm.routing.mode=offline but no offline_model provided. Falling back to online_model."
+                    )
+                selected_model = offline_model or online_model
+                selected_api_base = offline_api_base
+                auto_toggle = False
+                local_model = None
+                local_api_base = None
+            else:
+                raise ValueError(
+                    "Invalid llm.routing.mode '%s'. Supported values: auto, online, offline"
+                    % routing_mode
+                )
+
+            planner_config = MissionPlannerConfig(
+                token_path=config_yaml["auth"]["token_env_file"],
+                schema_paths=[f"schemas/{data['schema']}.xsd"],
+                lint_xml=lint_xml,
+                max_retries=int(planner_cfg["retries"]["max"]),
+                max_tokens=int(generation_cfg["max_tokens"]),
+                temperature=float(generation_cfg["temperature"]),
+                ltl=ltl,
+                promela_template_path=pml_template_path,
+                spin_path=spin_path,
+                log_directory=mission_cfg["log_directory"],
+                model_routing=ModelRoutingConfig(
+                    model=selected_model,
+                    api_base=selected_api_base,
+                    auto_model_toggle=auto_toggle,
+                    local_model=local_model,
+                    local_api_base=local_api_base,
+                ),
+            )
+
             mp = MissionPlanner(
-                config_yaml["token"],
-                [f"schemas/{data['schema']}.xsd"],
-                lint_xml,
+                planner_config,
                 context_files,
                 tpg,
-                config_yaml["max_retries"],
-                config_yaml["max_tokens"],
-                config_yaml["temperature"],
-                ltl,
-                pml_template_path,
-                spin_path,
-                config_yaml["log_directory"],
                 logger,
                 context_vars,
             )
@@ -841,8 +889,8 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
             visit_points_payload = _build_visit_points(mp.tree_points, move_ids)
 
         try:
-            tcp_host = data.get("tcpHost") or config_yaml.get("host", "127.0.0.1")
-            tcp_port_raw = data.get("tcpPort") or config_yaml.get("port", 12345)
+            tcp_host = data.get("tcpHost") or network_cfg.get("host", "127.0.0.1")
+            tcp_port_raw = data.get("tcpPort") or network_cfg.get("port", 12345)
             tcp_port = int(tcp_port_raw)
             nic = NetworkInterface(logger, tcp_host, tcp_port)
             nic.init_socket()

@@ -5,6 +5,10 @@
   color: #17202a;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 html,
 body {
   height: 100%;
@@ -144,11 +148,12 @@ label {
 }
 
 select,
+input,
 textarea {
   border-radius: 12px;
   border: 1px solid #d6dde8;
   padding: 12px;
-  font-size: 14px;
+  font-size: 16px;
   font-family: inherit;
 }
 
@@ -367,4 +372,81 @@ footer {
 
 .toast-close:hover {
   background: #e7edf7;
+}
+
+@media (max-width: 900px) {
+  body {
+    padding: 16px;
+  }
+
+  .app {
+    gap: 16px;
+  }
+
+  .card {
+    padding: 16px;
+    border-radius: 14px;
+  }
+
+  .settings-panel {
+    width: min(420px, calc(100vw - 32px));
+    max-height: min(70vh, 560px);
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  body {
+    padding: 12px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .app {
+    max-width: 100%;
+  }
+
+  .settings-wrapper,
+  .missions-wrapper {
+    left: 12px;
+  }
+
+  .settings-wrapper {
+    bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .missions-wrapper {
+    bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+
+  .settings-button,
+  .icon-button {
+    width: 52px;
+    height: 52px;
+  }
+
+  .settings-panel {
+    left: 0;
+    bottom: 64px;
+    width: min(500px, calc(100vw - 24px));
+    max-height: min(68vh, 520px);
+  }
+
+  .prompt-row {
+    gap: 10px;
+  }
+
+  #savedMissions {
+    min-height: 180px;
+  }
+
+  .toast {
+    width: calc(100vw - 20px);
+    max-height: 78vh;
+    border-radius: 12px;
+    padding: 12px;
+  }
+
+  .toast textarea {
+    min-height: 150px;
+  }
 }

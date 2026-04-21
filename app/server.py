@@ -429,7 +429,32 @@ async def index():
             "<h1>Missing web UI</h1><p>Expected app/web/index.html</p>",
             status_code=404,
         )
-    return HTMLResponse(index_path.read_text(encoding="utf-8"))
+    html = index_path.read_text(encoding="utf-8")
+
+    # Cache-bust static assets so mobile browsers pick up fresh JS/CSS after updates.
+    css_path = WEB_DIR / "style.css"
+    js_path = WEB_DIR / "app.js"
+    if css_path.exists():
+        css_version = int(css_path.stat().st_mtime)
+        html = html.replace(
+            'href="/static/style.css"',
+            f'href="/static/style.css?v={css_version}"',
+        )
+    if js_path.exists():
+        js_version = int(js_path.stat().st_mtime)
+        html = html.replace(
+            'src="/static/app.js"',
+            f'src="/static/app.js?v={js_version}"',
+        )
+
+    return HTMLResponse(
+        html,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 
 @app.get("/health")

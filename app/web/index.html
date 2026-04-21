@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>GPT Mission Planner</title>
     <link
       rel="stylesheet"
@@ -142,6 +142,13 @@
           <label for="prompt">Mission prompt</label>
           <div class="prompt-row">
             <textarea id="prompt" rows="1" placeholder="Describe the mission..."></textarea>
+            <input
+              id="audioCapture"
+              type="file"
+              accept="audio/*"
+              capture="microphone"
+              hidden
+            />
             <button
               id="micBtn"
               class="secondary icon-button mic-idle"

@@ -24,6 +24,7 @@ const xmlToastClose = document.getElementById("xmlToastClose");
 const debugCard = document.getElementById("debugCard");
 const mapEl = document.getElementById("map");
 const debugPolygonBtn = document.getElementById("debugPolygonBtn");
+const audioCaptureInput = document.getElementById("audioCapture");
 const savedMissionsSelect = document.getElementById("savedMissions");
 const loadSavedMissionBtn = document.getElementById("loadSavedMission");
 const sendSavedMissionBtn = document.getElementById("sendSavedMission");
@@ -41,6 +42,53 @@ let mapVisitLayer = null;
 let activeBaseLayer = "Satellite";
 let lastFitBounds = null;
 let mapResizeTimer = null;
+
+const defaultFetchTimeoutMs = 10000;
+
+const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const fetchWithTimeout = async (url, options = {}, timeoutMs = defaultFetchTimeoutMs) => {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+};
+
+const fetchJson = async (
+  url,
+  options = {},
+  { timeoutMs = defaultFetchTimeoutMs, retries = 1, retryDelayMs = 350 } = {}
+) => {
+  let lastError = null;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      const response = await fetchWithTimeout(url, options, timeoutMs);
+      if (!response.ok) {
+        const error = new Error(`HTTP ${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
+      return await response.json();
+    } catch (error) {
+      lastError = error;
+      const status = Number(error?.status);
+      const canRetryHttp = Number.isFinite(status) && status >= 500;
+      const canRetryNetwork = error?.name === "AbortError" || !Number.isFinite(status);
+      const shouldRetry = attempt < retries && (canRetryHttp || canRetryNetwork);
+      if (!shouldRetry) {
+        throw error;
+      }
+      await sleep(retryDelayMs * (attempt + 1));
+    }
+  }
+  throw lastError || new Error("Request failed");
+};
 
 const savedMissionKey = "gpt-mission-planner.savedMissions";
 
@@ -234,12 +282,7 @@ const drawVisitPins = (visitPoints) => {
 const loadDebugPolygon = async () => {
   setStatus("Loading debug polygon...");
   try {
-    const res = await fetch("/debug_polygon");
-    if (!res.ok) {
-      setStatus("Failed to load debug polygon");
-      return;
-    }
-    const payload = await res.json();
+    const payload = await fetchJson("/debug_polygon", {}, { retries: 1 });
     if (payload.error) {
       setStatus(payload.error);
       return;
@@ -276,12 +319,7 @@ const loadSavedMission = async () => {
   const missionId = missionIds[0];
   setStatus("Loading saved mission...");
   try {
-    const res = await fetch(`/missions/${encodeURIComponent(missionId)}`);
-    if (!res.ok) {
-      setStatus("Failed to load saved mission");
-      return;
-    }
-    const payload = await res.json();
+    const payload = await fetchJson(`/missions/${encodeURIComponent(missionId)}`);
     if (payload.error) {
       setStatus(payload.error);
       return;
@@ -312,19 +350,18 @@ const sendSavedMission = async () => {
   const missionId = missionIds[0];
   setStatus("Sending saved mission...");
   try {
-    const res = await fetch(`/missions/${encodeURIComponent(missionId)}/send`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tcpHost: tcpHostInput ? tcpHostInput.value.trim() || null : null,
-        tcpPort: tcpPortInput ? tcpPortInput.value.trim() || null : null,
-      }),
-    });
-    if (!res.ok) {
-      setStatus("Failed to send mission");
-      return;
-    }
-    const payload = await res.json();
+    const payload = await fetchJson(
+      `/missions/${encodeURIComponent(missionId)}/send`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tcpHost: tcpHostInput ? tcpHostInput.value.trim() || null : null,
+          tcpPort: tcpPortInput ? tcpPortInput.value.trim() || null : null,
+        }),
+      },
+      { retries: 0 }
+    );
     if (payload.error) {
       setStatus(payload.error);
       return;
@@ -392,9 +429,7 @@ const mergeMissionLists = (existing, incoming) => {
 
 const hydrateSavedMissionsFromServer = async () => {
   try {
-    const res = await fetch("/missions");
-    if (!res.ok) return;
-    const payload = await res.json();
+    const payload = await fetchJson("/missions", {}, { retries: 1 });
     const missions = Array.isArray(payload.missions) ? payload.missions : [];
     if (!missions.length) return;
     const merged = mergeMissionLists(loadSavedMissions(), missions).slice(0, 25);
@@ -424,16 +459,15 @@ const clearSavedMission = async () => {
   if (!missionIds.length) return;
   setStatus("Clearing saved missions...");
   try {
-    const res = await fetch("/missions/delete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: missionIds }),
-    });
-    if (!res.ok) {
-      setStatus("Failed to clear saved missions");
-      return;
-    }
-    const payload = await res.json();
+    const payload = await fetchJson(
+      "/missions/delete",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: missionIds }),
+      },
+      { retries: 0 }
+    );
     if (payload.error) {
       setStatus(payload.error);
       return;
@@ -463,16 +497,15 @@ const clearAllMissions = async () => {
   if (!missionIds.length) return;
   setStatus("Clearing all saved missions...");
   try {
-    const res = await fetch("/missions/delete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: missionIds }),
-    });
-    if (!res.ok) {
-      setStatus("Failed to clear saved missions");
-      return;
-    }
-    const payload = await res.json();
+    const payload = await fetchJson(
+      "/missions/delete",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: missionIds }),
+      },
+      { retries: 0 }
+    );
     if (payload.error) {
       setStatus(payload.error);
       return;
@@ -527,8 +560,7 @@ const togglePanel = (panel, button) => {
 const fetchSchemas = async () => {
   if (!schemaSelect) return;
   try {
-    const res = await fetch("/schemas");
-    const data = await res.json();
+    const data = await fetchJson("/schemas", {}, { retries: 1 });
     schemaSelect.innerHTML = "";
     data.schemas.forEach((schema) => {
       const option = document.createElement("option");
@@ -544,8 +576,7 @@ const fetchSchemas = async () => {
 const fetchContextFiles = async () => {
   if (!contextSelect) return;
   try {
-    const res = await fetch("/context_files");
-    const data = await res.json();
+    const data = await fetchJson("/context_files", {}, { retries: 1 });
     const files = Array.isArray(data.files) ? data.files : [];
     const selected = typeof data.selected === "string" ? data.selected : "";
 
@@ -572,8 +603,7 @@ const fetchContextFiles = async () => {
 const fetchFarmPolygons = async () => {
   if (!farmSelect) return;
   try {
-    const res = await fetch("/farm_polygons");
-    const data = await res.json();
+    const data = await fetchJson("/farm_polygons", {}, { retries: 2, timeoutMs: 12000 });
     const files = Array.isArray(data.files) ? data.files : [];
     const selected = typeof data.selected === "string" ? data.selected : "";
 
@@ -601,9 +631,7 @@ const fetchFarmPolygons = async () => {
 
 const fetchTcpDefaults = async () => {
   try {
-    const res = await fetch("/tcp_defaults");
-    if (!res.ok) return;
-    const data = await res.json();
+    const data = await fetchJson("/tcp_defaults", {}, { retries: 1 });
     if (tcpHostInput && data.host) {
       tcpHostInput.value = String(data.host);
     }
@@ -645,6 +673,21 @@ const updateMicButtonMode = () => {
   if (!recording) {
     micBtn.setAttribute("aria-pressed", "false");
   }
+};
+
+const canUseLiveRecording = () => {
+  const hasMediaDevices = Boolean(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  const hasMediaRecorder = typeof window.MediaRecorder !== "undefined";
+  return hasMediaDevices && hasMediaRecorder;
+};
+
+const promptNativeAudioCapture = () => {
+  if (!audioCaptureInput) {
+    setStatus("Microphone unavailable on this browser");
+    return;
+  }
+  audioCaptureInput.value = "";
+  audioCaptureInput.click();
 };
 
 const autoGrowPrompt = () => {
@@ -732,8 +775,16 @@ const initLeafletMap = () => {
 };
 
 const startRecording = async () => {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    setStatus("Audio recording not supported");
+  if (!canUseLiveRecording()) {
+    setStatus("Live recording unavailable. Opening phone audio capture...");
+    promptNativeAudioCapture();
+    return;
+  }
+
+  if (!window.isSecureContext) {
+    // Android Chrome blocks getUserMedia on non-HTTPS origins.
+    setStatus("Mic requires HTTPS on mobile. Opening phone audio capture...");
+    promptNativeAudioCapture();
     return;
   }
 
@@ -762,7 +813,8 @@ const startRecording = async () => {
     setMicState("mic-recording");
     setStatus("Recording audio...");
   } catch (err) {
-    setStatus("Unable to access microphone");
+    setStatus("Unable to access microphone. Opening phone audio capture...");
+    promptNativeAudioCapture();
   }
 };
 
@@ -786,7 +838,7 @@ const uploadAudio = async ({ durationMs, recordedBytes }) => {
   setMicState("mic-idle");
 };
 
-const sendRequest = async ({ audioBlob, includeText = true } = {}) => {
+const sendRequest = async ({ audioBlob, audioFilename = "audio.webm", includeText = true } = {}) => {
   const payload = {
     text: includeText && promptInput ? promptInput.value.trim() || null : null,
     schema: schemaSelect ? schemaSelect.value : null,
@@ -815,77 +867,89 @@ const sendRequest = async ({ audioBlob, includeText = true } = {}) => {
   const formData = new FormData();
   formData.append("request", JSON.stringify(payload));
   if (audioBlob) {
-    formData.append("file", audioBlob, "audio.webm");
+    formData.append("file", audioBlob, audioFilename);
   }
 
   if (resultOutput) resultOutput.value = "";
   setToastVisible(false);
   if (sttOutput) sttOutput.value = "";
   setStatus("Generating...");
+  try {
+    const response = await fetchWithTimeout(
+      "/generate",
+      {
+        method: "POST",
+        body: formData,
+      },
+      30000
+    );
 
-  const response = await fetch("/generate", {
-    method: "POST",
-    body: formData,
-  });
+    if (!response.ok || !response.body) {
+      setStatus("Generation failed");
+      setMicState("mic-idle");
+      return;
+    }
 
-  if (!response.ok || !response.body) {
-    setStatus("Generation failed");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      lines.forEach((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        try {
+          const message = JSON.parse(trimmed);
+          if (message.stt) {
+            if (sttOutput) sttOutput.value = message.stt;
+            if (!payload.text && promptInput) {
+              promptInput.value = message.stt;
+              autoGrowPrompt();
+              updateMicButtonMode();
+            }
+          }
+          if (message.error) {
+            setStatus(message.error);
+          }
+          if (message.result) {
+            if (resultOutput) resultOutput.value = message.result;
+            if (debugEnabled) {
+              setToastVisible(true);
+            }
+          }
+          if (message.mission) {
+            saveMissionToStorage(message.mission);
+            populateSavedMissions();
+            selectSavedMissions([message.mission.id]);
+          }
+          if (message.treePoints) {
+            drawGpsHull(message.treePoints);
+          }
+          if (message.visitPoints) {
+            drawVisitPins(message.visitPoints);
+          }
+        } catch (err) {
+          console.error("Bad NDJSON", err);
+        }
+      });
+    }
+
+    setStatus("Done");
+  } catch (err) {
+    if (err && err.name === "AbortError") {
+      setStatus("Request timed out. Try again.");
+    } else {
+      setStatus("Generation failed");
+    }
+  } finally {
     setMicState("mic-idle");
-    return;
   }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
-
-    lines.forEach((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
-      try {
-        const message = JSON.parse(trimmed);
-        if (message.stt) {
-          if (sttOutput) sttOutput.value = message.stt;
-          if (!payload.text && promptInput) {
-            promptInput.value = message.stt;
-            autoGrowPrompt();
-            updateMicButtonMode();
-          }
-        }
-        if (message.error) {
-          setStatus(message.error);
-        }
-        if (message.result) {
-          if (resultOutput) resultOutput.value = message.result;
-          if (debugEnabled) {
-            setToastVisible(true);
-          }
-        }
-        if (message.mission) {
-          saveMissionToStorage(message.mission);
-          populateSavedMissions();
-          selectSavedMissions([message.mission.id]);
-        }
-        if (message.treePoints) {
-          drawGpsHull(message.treePoints);
-        }
-        if (message.visitPoints) {
-          drawVisitPins(message.visitPoints);
-        }
-      } catch (err) {
-        console.error("Bad NDJSON", err);
-      }
-    });
-  }
-
-  setStatus("Done");
-  setMicState("mic-idle");
 };
 
 if (micBtn) {
@@ -904,12 +968,37 @@ if (micBtn) {
     await startRecording();
   });
 }
+if (audioCaptureInput) {
+  audioCaptureInput.addEventListener("change", async (event) => {
+    const input = event.target;
+    const file = input && input.files && input.files[0] ? input.files[0] : null;
+    if (!file) {
+      setStatus("Audio capture canceled");
+      return;
+    }
+    setMicState("mic-loading");
+    setStatus("Uploading captured audio...");
+    await sendRequest({
+      audioBlob: file,
+      audioFilename: file.name || "capture_audio",
+      includeText: false,
+    });
+    input.value = "";
+  });
+}
 if (settingsBtn) {
   settingsBtn.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
-    togglePanel(settingsPanel, settingsBtn);
+    const opening = isHidden(settingsPanel);
+    setPanelOpen(settingsPanel, settingsBtn, opening);
+    if (opening) {
+      fetchSchemas();
+      fetchContextFiles();
+      fetchFarmPolygons();
+      fetchTcpDefaults();
+    }
   });
 }
 if (missionsBtn) {

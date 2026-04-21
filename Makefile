@@ -4,6 +4,7 @@ CONFIG := ./app/config/localhost.yaml
 WEB_PORT ?= 8002
 MISSION_PORT ?= 12346
 TARGET ?= prod
+CACHE_DIR ?= ./logs/.cache
 
 # set PLATFORM to linux/arm64 on silicon mac, otherwise linux/amd64
 ARCH := $(shell uname -m)
@@ -42,6 +43,7 @@ bash:
 		-v ./schemas/:/${WORKSPACE}/schemas:Z \
 		-v ./scripts/:/${WORKSPACE}/scripts:Z \
 		-v ./logs:/${WORKSPACE}/logs:Z \
+		-v ${CACHE_DIR}:/root/.cache:Z \
 		-v ./test:/${WORKSPACE}/test:Z \
 		--env-file .env \
 		-p ${WEB_PORT}:${WEB_PORT} \
@@ -66,6 +68,7 @@ prod:
 	docker run --rm \
 		--platform=$(PLATFORM) \
 		-v ./logs:/gpt-mission-planner/logs:Z \
+		-v ${CACHE_DIR}:/root/.cache:Z \
 		--env-file .env \
 		-p ${WEB_PORT}:${WEB_PORT} \
 		-p ${MISSION_PORT}:${MISSION_PORT}/udp \

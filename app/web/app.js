@@ -578,23 +578,30 @@ const fetchContextFiles = async () => {
   try {
     const data = await fetchJson("/context_files", {}, { retries: 1 });
     const files = Array.isArray(data.files) ? data.files : [];
-    const selected = typeof data.selected === "string" ? data.selected : "";
+    const selected = Array.isArray(data.selected)
+      ? data.selected.filter((item) => typeof item === "string")
+      : typeof data.selected === "string" && data.selected
+      ? [data.selected]
+      : [];
 
     contextSelect.innerHTML = "";
-    const noneOption = document.createElement("option");
-    noneOption.value = "";
-    noneOption.textContent = "No context";
-    contextSelect.appendChild(noneOption);
+
+    if (!files.length) {
+      const emptyOption = document.createElement("option");
+      emptyOption.value = "";
+      emptyOption.textContent = "No context files available";
+      emptyOption.disabled = true;
+      contextSelect.appendChild(emptyOption);
+      return;
+    }
+
     files.forEach((file) => {
       const option = document.createElement("option");
       option.value = file;
       option.textContent = file;
+      option.selected = selected.includes(file);
       contextSelect.appendChild(option);
     });
-
-    if (selected && files.includes(selected)) {
-      contextSelect.value = selected;
-    }
   } catch (err) {
     setStatus("Failed to load context files");
   }
@@ -645,8 +652,9 @@ const fetchTcpDefaults = async () => {
 
 const getSelectedContext = () => {
   if (!contextSelect) return [];
-  const value = contextSelect.value?.trim();
-  return value ? [value] : [];
+  return Array.from(contextSelect.selectedOptions || [])
+    .map((option) => option.value.trim())
+    .filter(Boolean);
 };
 
 const getSelectedFarm = () => {

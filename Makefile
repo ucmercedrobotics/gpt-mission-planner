@@ -65,7 +65,7 @@ server:
 	nc -lk 172.17.0.1 12346 > test.bin
 
 prod:
-	docker run --rm \
+	docker run --rm -d \
 		--platform=$(PLATFORM) \
 		-v ./logs:/gpt-mission-planner/logs:Z \
 		-v ${CACHE_DIR}:/root/.cache:Z \

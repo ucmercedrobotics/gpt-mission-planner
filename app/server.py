@@ -465,27 +465,52 @@ async def health():
 @app.get("/context_files")
 async def get_context_files():
     try:
-        selected_context = ""
+        selected_context: list[str] = []
         configured_context_files = mission_cfg.get("context_files")
         if isinstance(configured_context_files, str):
             configured_context_files = [configured_context_files]
-        if isinstance(configured_context_files, list):
-            for configured_file in configured_context_files:
-                if isinstance(configured_file, str) and configured_file.strip():
-                    selected_context = Path(configured_file).name
-                    break
 
         if not PROMPTS_DIR.exists():
             return {"files": [], "selected": selected_context}
 
-        files = sorted({p.name for p in PROMPTS_DIR.rglob("*") if p.is_file()})
-        if selected_context and selected_context not in files:
-            selected_context = ""
+        files = sorted({path.name for path in PROMPTS_DIR.rglob("*") if path.is_file()})
+        available_files = set(files)
+
+        if isinstance(configured_context_files, list):
+            for configured_file in configured_context_files:
+                if not isinstance(configured_file, str) or not configured_file.strip():
+                    continue
+
+                resolved_path = _resolve_config_path(str(CONFIG_PATH), configured_file)
+                if (
+                    resolved_path.exists()
+                    and resolved_path.is_file()
+                    and CONTEXT_DIR in resolved_path.parents
+                ):
+                    basename = resolved_path.name
+                    if basename in available_files:
+                        selected_context.append(basename)
+                        continue
+
+                basename = Path(configured_file).name
+                matches = [f for f in files if f == basename]
+                if not matches:
+                    continue
+                if len(matches) > 1:
+                    logger.warning(
+                        "Multiple context files matched configured file %s. Using %s",
+                        configured_file,
+                        matches[0],
+                    )
+                selected_context.append(matches[0])
+
+        # Preserve selection order while removing duplicates.
+        selected_context = list(dict.fromkeys(selected_context))
 
         return {"files": files, "selected": selected_context}
     except Exception as e:
         logger.error(f"Error getting context files: {e}")
-        return {"files": [], "selected": ""}
+        return {"files": [], "selected": []}
 
 
 @app.get("/farm_polygons")

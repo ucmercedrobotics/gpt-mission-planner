@@ -1,4 +1,4 @@
-Orientation Rules
+Kinova Kortex Manipulator Orientation Rules
 
 Use REP-103 names:
 

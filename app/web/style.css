@@ -157,6 +157,11 @@ textarea {
   font-family: inherit;
 }
 
+select[multiple] {
+  min-height: 156px;
+  padding: 8px;
+}
+
 textarea {
   resize: vertical;
 }

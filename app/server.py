@@ -145,19 +145,6 @@ class GenerateRequest(BaseModel):
     text: str | None
 
 
-@app.get("/debug_polygon")
-def debug_polygon():
-    bin_path = BASE_DIR / "gpt_outputs" / "tfr" / "shiraz_8.bin"
-    if not bin_path.exists():
-        return {"error": "Debug bin file not found"}
-
-    points, visit_points = _extract_tree_points_from_bin(bin_path)
-    if not points:
-        return {"error": "No tree points found in debug bin"}
-
-    return {"treePoints": points, "visitPoints": visit_points}
-
-
 _openai_client = None
 _whisper_model = None
 

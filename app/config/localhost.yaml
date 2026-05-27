@@ -35,7 +35,7 @@ mission:
     - "./app/resources/context/prompts/mission_planner/wheeled/orchard.j2"
     - "./app/resources/context/prompts/mission_planner/manipulators/kinova.txt"
   farm:
-    polygon_file: "farm_polygons/smart_farm_almonds.yaml"
+    polygon_file: "farm_polygons/reza_medium.yaml"
 
 network:
   tcp:

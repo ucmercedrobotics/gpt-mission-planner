@@ -23,7 +23,6 @@ const xmlToast = document.getElementById("xmlToast");
 const xmlToastClose = document.getElementById("xmlToastClose");
 const debugCard = document.getElementById("debugCard");
 const mapEl = document.getElementById("map");
-const debugPolygonBtn = document.getElementById("debugPolygonBtn");
 const audioCaptureInput = document.getElementById("audioCapture");
 const savedMissionsSelect = document.getElementById("savedMissions");
 const loadSavedMissionBtn = document.getElementById("loadSavedMission");
@@ -277,28 +276,6 @@ const drawVisitPins = (visitPoints) => {
     });
     marker.addTo(mapVisitLayer);
   });
-};
-
-const loadDebugPolygon = async () => {
-  setStatus("Loading debug polygon...");
-  try {
-    const payload = await fetchJson("/debug_polygon", {}, { retries: 1 });
-    if (payload.error) {
-      setStatus(payload.error);
-      return;
-    }
-    if (payload.treePoints) {
-      drawGpsHull(payload.treePoints);
-      if (payload.visitPoints) {
-        drawVisitPins(payload.visitPoints);
-      }
-      setStatus(`Debug polygon loaded (${payload.treePoints.length} points)`);
-      return;
-    }
-    setStatus("No debug polygon data received");
-  } catch (err) {
-    setStatus("Failed to load debug polygon");
-  }
 };
 
 const getSelectedMissionIds = () => {
@@ -613,6 +590,7 @@ const fetchFarmPolygons = async () => {
     const data = await fetchJson("/farm_polygons", {}, { retries: 2, timeoutMs: 12000 });
     const files = Array.isArray(data.files) ? data.files : [];
     const selected = typeof data.selected === "string" ? data.selected : "";
+    const currentSelection = farmSelect.value?.trim() || "";
 
     farmSelect.innerHTML = "";
 
@@ -628,8 +606,13 @@ const fetchFarmPolygons = async () => {
       farmSelect.appendChild(option);
     });
 
-    if (selected && files.includes(selected)) {
-      farmSelect.value = selected;
+    const preferredSelection =
+      (currentSelection && files.includes(currentSelection) && currentSelection) ||
+      (selected && files.includes(selected) && selected) ||
+      "";
+
+    if (preferredSelection) {
+      farmSelect.value = preferredSelection;
     }
   } catch (err) {
     setStatus("Failed to load farm polygons");
@@ -1085,11 +1068,6 @@ if (debugModeCheckbox) {
   });
 } else {
   setDebugVisibility(false);
-}
-if (debugPolygonBtn) {
-  debugPolygonBtn.addEventListener("click", () => {
-    loadDebugPolygon();
-  });
 }
 if (loadSavedMissionBtn) {
   loadSavedMissionBtn.addEventListener("click", () => {

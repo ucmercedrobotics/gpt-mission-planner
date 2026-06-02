@@ -1,0 +1,23 @@
+FARM GPS DATA:
+
+Traversal axis: {{ tree_points.traversal_axis }}
+
+TREE POSITIONS:
+{% for tree in tree_points.trees %}
+Tree {{ tree.tree_index }} (row={{ tree.row }}, col={{ tree.col }}): lat={{ tree.lat }}, lon={{ tree.lon }}{% if tree.row_waypoints %}, row_waypoints={{ tree.row_waypoints }}{% endif %}
+
+{% endfor %}
+AISLE ENTRANCES:
+{% for entrance in tree_points.aisle_entrances %}
+Entrance {{ entrance.entrance_index }}: lat={{ entrance.lat }}, lon={{ entrance.lon }}
+{% endfor %}
+
+Aisle to entrance index mapping: {{ tree_points.aisle_to_entrance_indices }}
+
+RULES:
+- Navigate by selecting GPS coordinates directly from the data above.
+- You CANNOT drive through {{ tree_points.traversal_axis }}s of trees.
+- You MUST move to {{ tree_points.traversal_axis }} head (use aisle entrances) when entering and exiting {{ tree_points.traversal_axis }}s.
+- If traversal between trees is long, plan a path that includes intermediate waypoints.
+
+USE THIS INFORMATION TO CREATE THE XML MISSION.

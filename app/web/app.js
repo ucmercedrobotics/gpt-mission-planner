@@ -537,6 +537,7 @@ const togglePanel = (panel, button) => {
 const fetchSchemas = async () => {
   if (!schemaSelect) return;
   try {
+    const currentSelection = schemaSelect.value || "";
     const data = await fetchJson("/schemas", {}, { retries: 1 });
     schemaSelect.innerHTML = "";
     data.schemas.forEach((schema) => {
@@ -545,6 +546,9 @@ const fetchSchemas = async () => {
       option.textContent = schema;
       schemaSelect.appendChild(option);
     });
+    if (currentSelection && Array.from(schemaSelect.options).some((o) => o.value === currentSelection)) {
+      schemaSelect.value = currentSelection;
+    }
   } catch (err) {
     setStatus("Failed to load schemas");
   }
@@ -553,13 +557,15 @@ const fetchSchemas = async () => {
 const fetchContextFiles = async () => {
   if (!contextSelect) return;
   try {
+    const currentSelections = getSelectedContext();
     const data = await fetchJson("/context_files", {}, { retries: 1 });
     const files = Array.isArray(data.files) ? data.files : [];
-    const selected = Array.isArray(data.selected)
+    const serverSelected = Array.isArray(data.selected)
       ? data.selected.filter((item) => typeof item === "string")
       : typeof data.selected === "string" && data.selected
       ? [data.selected]
       : [];
+    const selected = currentSelections.length > 0 ? currentSelections : serverSelected;
 
     contextSelect.innerHTML = "";
 
@@ -622,10 +628,10 @@ const fetchFarmPolygons = async () => {
 const fetchTcpDefaults = async () => {
   try {
     const data = await fetchJson("/tcp_defaults", {}, { retries: 1 });
-    if (tcpHostInput && data.host) {
+    if (tcpHostInput && data.host && !tcpHostInput.value.trim()) {
       tcpHostInput.value = String(data.host);
     }
-    if (tcpPortInput && data.port) {
+    if (tcpPortInput && data.port && !tcpPortInput.value.trim()) {
       tcpPortInput.value = String(data.port);
     }
   } catch (err) {

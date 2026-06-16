@@ -78,6 +78,8 @@ class MissionPlanner:
         if tpg is not None:
             self.tpg: TreePlacementGenerator = tpg
             self.tree_points: dict[str, Any] = self.tpg.generate_tree_payload()
+            if self.context_vars is not None:
+                self.context_vars["tree_points"] = self.tree_points
         else:
             self.logger.warning(
                 "No tree placement generator found. Assuming non-orchard environment..."

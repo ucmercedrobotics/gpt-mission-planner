@@ -23,7 +23,6 @@ const xmlToast = document.getElementById("xmlToast");
 const xmlToastClose = document.getElementById("xmlToastClose");
 const debugCard = document.getElementById("debugCard");
 const mapEl = document.getElementById("map");
-const debugPolygonBtn = document.getElementById("debugPolygonBtn");
 const audioCaptureInput = document.getElementById("audioCapture");
 const savedMissionsSelect = document.getElementById("savedMissions");
 const loadSavedMissionBtn = document.getElementById("loadSavedMission");
@@ -277,28 +276,6 @@ const drawVisitPins = (visitPoints) => {
     });
     marker.addTo(mapVisitLayer);
   });
-};
-
-const loadDebugPolygon = async () => {
-  setStatus("Loading debug polygon...");
-  try {
-    const payload = await fetchJson("/debug_polygon", {}, { retries: 1 });
-    if (payload.error) {
-      setStatus(payload.error);
-      return;
-    }
-    if (payload.treePoints) {
-      drawGpsHull(payload.treePoints);
-      if (payload.visitPoints) {
-        drawVisitPins(payload.visitPoints);
-      }
-      setStatus(`Debug polygon loaded (${payload.treePoints.length} points)`);
-      return;
-    }
-    setStatus("No debug polygon data received");
-  } catch (err) {
-    setStatus("Failed to load debug polygon");
-  }
 };
 
 const getSelectedMissionIds = () => {
@@ -560,6 +537,7 @@ const togglePanel = (panel, button) => {
 const fetchSchemas = async () => {
   if (!schemaSelect) return;
   try {
+    const currentSelection = schemaSelect.value || "";
     const data = await fetchJson("/schemas", {}, { retries: 1 });
     schemaSelect.innerHTML = "";
     data.schemas.forEach((schema) => {
@@ -568,6 +546,9 @@ const fetchSchemas = async () => {
       option.textContent = schema;
       schemaSelect.appendChild(option);
     });
+    if (currentSelection && Array.from(schemaSelect.options).some((o) => o.value === currentSelection)) {
+      schemaSelect.value = currentSelection;
+    }
   } catch (err) {
     setStatus("Failed to load schemas");
   }
@@ -576,13 +557,15 @@ const fetchSchemas = async () => {
 const fetchContextFiles = async () => {
   if (!contextSelect) return;
   try {
+    const currentSelections = getSelectedContext();
     const data = await fetchJson("/context_files", {}, { retries: 1 });
     const files = Array.isArray(data.files) ? data.files : [];
-    const selected = Array.isArray(data.selected)
+    const serverSelected = Array.isArray(data.selected)
       ? data.selected.filter((item) => typeof item === "string")
       : typeof data.selected === "string" && data.selected
       ? [data.selected]
       : [];
+    const selected = currentSelections.length > 0 ? currentSelections : serverSelected;
 
     contextSelect.innerHTML = "";
 
@@ -613,6 +596,7 @@ const fetchFarmPolygons = async () => {
     const data = await fetchJson("/farm_polygons", {}, { retries: 2, timeoutMs: 12000 });
     const files = Array.isArray(data.files) ? data.files : [];
     const selected = typeof data.selected === "string" ? data.selected : "";
+    const currentSelection = farmSelect.value?.trim() || "";
 
     farmSelect.innerHTML = "";
 
@@ -628,8 +612,13 @@ const fetchFarmPolygons = async () => {
       farmSelect.appendChild(option);
     });
 
-    if (selected && files.includes(selected)) {
-      farmSelect.value = selected;
+    const preferredSelection =
+      (currentSelection && files.includes(currentSelection) && currentSelection) ||
+      (selected && files.includes(selected) && selected) ||
+      "";
+
+    if (preferredSelection) {
+      farmSelect.value = preferredSelection;
     }
   } catch (err) {
     setStatus("Failed to load farm polygons");
@@ -639,10 +628,10 @@ const fetchFarmPolygons = async () => {
 const fetchTcpDefaults = async () => {
   try {
     const data = await fetchJson("/tcp_defaults", {}, { retries: 1 });
-    if (tcpHostInput && data.host) {
+    if (tcpHostInput && data.host && !tcpHostInput.value.trim()) {
       tcpHostInput.value = String(data.host);
     }
-    if (tcpPortInput && data.port) {
+    if (tcpPortInput && data.port && !tcpPortInput.value.trim()) {
       tcpPortInput.value = String(data.port);
     }
   } catch (err) {
@@ -1085,11 +1074,6 @@ if (debugModeCheckbox) {
   });
 } else {
   setDebugVisibility(false);
-}
-if (debugPolygonBtn) {
-  debugPolygonBtn.addEventListener("click", () => {
-    loadDebugPolygon();
-  });
 }
 if (loadSavedMissionBtn) {
   loadSavedMissionBtn.addEventListener("click", () => {

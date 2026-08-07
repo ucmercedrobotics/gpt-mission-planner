@@ -25,6 +25,10 @@ from openai import OpenAI
 from mission_planner import MissionPlanner, MissionPlannerConfig, ModelRoutingConfig
 from network_interface import NetworkInterface
 from orchards.tree_placement_generator import TreePlacementGenerator
+from fleet.config import build_registry, eligible_robots, load_fleet_config
+from fleet.dispatcher import FleetDispatcher
+from fleet.schema_index import schema_path
+from fleet.service import robot_views, start_fleet_service
 
 load_dotenv()
 
@@ -57,6 +61,16 @@ llm_cfg: dict[str, Any] = config_yaml["llm"]
 routing_cfg: dict[str, Any] = llm_cfg["routing"]
 endpoints_cfg: dict[str, Any] = llm_cfg["endpoints"]
 network_cfg: dict[str, Any] = config_yaml["network"]["tcp"]
+
+# Robots register against a dedicated port so the address they are configured
+# with does not depend on whether the operator launched the web app or the CLI.
+fleet_cfg = load_fleet_config(config_yaml)
+fleet_registry = build_registry(fleet_cfg, logger) if fleet_cfg.enabled else None
+fleet_dispatcher = FleetDispatcher(logger) if fleet_cfg.enabled else None
+if fleet_registry is not None:
+    start_fleet_service(
+        fleet_registry, logger, fleet_cfg.host, fleet_cfg.port, fleet_cfg.auth_token
+    )
 
 
 def _resolve_config_path(config_path: str, candidate: str) -> Path:
@@ -542,6 +556,23 @@ async def get_schemas():
         return {"schemas": []}
 
 
+@app.get("/robots")
+def get_robots():
+    """Live roster for the fleet panel.
+
+    Read-only mirror of the discovery service's own /robots, served on the web
+    port so the UI does not need a second origin. Both read the same in-process
+    registry.
+    """
+    if fleet_registry is None:
+        return {"enabled": False, "robots": [], "discoveryPort": fleet_cfg.port}
+    return {
+        "enabled": True,
+        "robots": robot_views(fleet_registry),
+        "discoveryPort": fleet_cfg.port,
+    }
+
+
 @app.get("/tcp_defaults")
 def get_tcp_defaults(request: Request):
     config_host = str(network_cfg.get("host", "127.0.0.1"))
@@ -634,6 +665,17 @@ def send_mission(
         except Exception as exc:
             logger.warning("Failed reading tree points for %s: %s", mission_id, exc)
 
+    allocation_path = mission_dir / f"{mission_id}_allocation.json"
+    if fleet_registry is not None and allocation_path.exists():
+        dispatch = _resend_fleet_mission(
+            mission_id, mission_dir, allocation_path, tree_points
+        )
+        if "error" in dispatch:
+            return dispatch
+        with open(xml_path, "r", encoding="utf-8") as f:
+            result = f.read()
+        return {"result": result, "sent": True, "dispatch": dispatch["dispatch"]}
+
     try:
         config_host = network_cfg.get("host", "127.0.0.1")
         tcp_host = payload.get("tcpHost") or config_host
@@ -642,9 +684,14 @@ def send_mission(
         tcp_port_raw = payload.get("tcpPort") or network_cfg.get("port", 12345)
         tcp_port = int(tcp_port_raw)
         nic = NetworkInterface(logger, tcp_host, tcp_port)
-        nic.init_socket()
-        nic.send_file(str(xml_path), tree_points)
-        nic.close_socket()
+        try:
+            nic.init_socket()
+            nic.send_file(str(xml_path), tree_points)
+            ack = nic.recv_ack()
+        finally:
+            nic.close_socket()
+        if ack is not None and not ack.get("accepted", False):
+            return {"error": ack.get("error") or "Robot rejected the mission"}
     except Exception as exc:
         logger.warning("TCP resend failed: %s", exc)
         return {"error": "Failed to send mission"}
@@ -653,6 +700,72 @@ def send_mission(
         result = f.read()
 
     return {"result": result, "sent": True}
+
+
+def _resend_fleet_mission(
+    mission_id: str, mission_dir: Path, allocation_path: Path, tree_points: Any
+) -> dict:
+    """Resend a saved multi-robot mission to wherever those robots are now.
+
+    Endpoints are re-resolved from the live registry rather than reused from
+    the original run -- a robot that rebooted onto a new IP still gets its tree.
+    """
+    from fleet.models import Assignment, RobotPlan
+
+    try:
+        with open(allocation_path, "r", encoding="utf-8") as f:
+            allocation = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Could not read allocation for %s: %s", mission_id, exc)
+        return {"error": "Failed to read mission allocation"}
+
+    robot_files = allocation.get("robotFiles") or {}
+    plans_meta = {p["robotId"]: p for p in allocation.get("plans", [])}
+
+    plans: list[RobotPlan] = []
+    robots_by_id = {}
+    missing: list[str] = []
+    for robot_id, filename in robot_files.items():
+        robot = fleet_registry.get(robot_id)
+        if robot is None or robot.host is None:
+            missing.append(robot_id)
+            continue
+        meta = plans_meta.get(robot_id, {})
+        plans.append(
+            RobotPlan(
+                robot_id=robot_id,
+                xml_path=str(mission_dir / filename),
+                matched_schema=meta.get("schema", ""),
+                assignment=Assignment(
+                    robot_id=robot_id,
+                    sub_mission=meta.get("subMission") or "(resend)",
+                    assigned_aisles=meta.get("assignedAisles") or [],
+                    assigned_tree_indices=meta.get("assignedTreeIndices") or [],
+                ),
+            )
+        )
+        robots_by_id[robot_id] = robot
+
+    if not plans:
+        return {
+            "error": "None of this mission's robots are currently online: "
+            + ", ".join(sorted(missing))
+        }
+
+    results = fleet_dispatcher.dispatch(plans, robots_by_id, mission_id, tree_points)
+    dispatch = [r.model_dump(mode="json") for r in results]
+    for robot_id in missing:
+        dispatch.append(
+            {
+                "robot_id": robot_id,
+                "outcome": "unreachable",
+                "host": "",
+                "port": 0,
+                "mission_id": mission_id,
+                "error": "Robot is not currently registered.",
+            }
+        )
+    return {"dispatch": dispatch}
 
 
 @app.post("/missions/delete")
@@ -884,9 +997,30 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
                     % routing_mode
                 )
 
+            # Fleet mode plans against every eligible robot's schema at once,
+            # deduplicated so two robots on the same platform contribute one
+            # copy of the XSD to the prompt.
+            target_mode = str(data.get("targetMode") or "").strip().lower()
+            fleet_robots = []
+            if fleet_registry is not None and target_mode != "manual":
+                fleet_robots = eligible_robots(fleet_registry, fleet_cfg)
+                requested_ids = data.get("robotIds")
+                if isinstance(requested_ids, list) and requested_ids:
+                    wanted = {str(i) for i in requested_ids}
+                    fleet_robots = [r for r in fleet_robots if r.robot_id in wanted]
+
+            if fleet_robots:
+                schema_paths = list(
+                    dict.fromkeys(schema_path(r.schema_name) for r in fleet_robots)
+                )
+            elif data.get("schema"):
+                schema_paths = [f"schemas/{data['schema']}.xsd"]
+            else:
+                schema_paths = list(mission_cfg.get("schema_paths", []))
+
             planner_config = MissionPlannerConfig(
                 token_path=config_yaml["auth"]["token_env_file"],
-                schema_paths=[f"schemas/{data['schema']}.xsd"],
+                schema_paths=schema_paths,
                 lint_xml=lint_xml,
                 max_retries=int(planner_cfg["retries"]["max"]),
                 max_tokens=int(generation_cfg["max_tokens"]),
@@ -914,32 +1048,123 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
         except yaml.YAMLError as exc:
             logger.error(f"Improper YAML config: {exc}")
 
-        file_xml_out = mp.run(text)
-        with open(file_xml_out, "r") as f:
-            result = f.read()
+        tree_points = (
+            mp.tree_points if hasattr(mp, "tree_points") and mp.tree_points else None
+        )
+        fleet_payload = None
+        plan_files: list[tuple[str, str]] = []
 
-        tree_points_payload = None
-        visit_points_payload = None
-        if hasattr(mp, "tree_points") and mp.tree_points:
-            tree_points_payload = _build_tree_points_payload(mp.tree_points)
-            move_ids = _extract_move_to_tree_ids(result)
-            visit_points_payload = _build_visit_points(mp.tree_points, move_ids)
+        if fleet_robots:
+            logger.info(
+                "Planning across %d robot(s): %s",
+                len(fleet_robots),
+                ", ".join(f"{r.robot_id} ({r.schema_name})" for r in fleet_robots),
+            )
+            try:
+                fleet_result = mp.run_fleet(text, fleet_robots, mission_id)
+            except Exception as exc:
+                logger.error("Fleet planning failed: %s", exc)
+                yield json.dumps({"error": f"Fleet planning failed: {exc}"}) + "\n"
+                return
 
-        try:
+            if not fleet_result.plans:
+                reason = (
+                    fleet_result.allocation.unassigned_reason
+                    or "No robot could be given a valid plan."
+                )
+                yield json.dumps({"error": reason}) + "\n"
+                return
+
+            dispatch_results = fleet_dispatcher.dispatch(
+                fleet_result.plans,
+                {r.robot_id: r for r in fleet_robots},
+                mission_id,
+                tree_points,
+            )
+
+            plans_payload = []
+            visit_points_payload = []
+            for plan in fleet_result.plans:
+                with open(plan.xml_path, "r") as f:
+                    plan_xml = f.read()
+                plan_files.append((plan.robot_id, plan_xml))
+                if tree_points:
+                    move_ids = _extract_move_to_tree_ids(plan_xml)
+                    for point in _build_visit_points(tree_points, move_ids):
+                        # Each robot walks its own route, so order restarts per
+                        # robot rather than pretending there is one path.
+                        point["robotId"] = plan.robot_id
+                        visit_points_payload.append(point)
+                plans_payload.append(
+                    {
+                        "robotId": plan.robot_id,
+                        "schema": plan.matched_schema,
+                        "subMission": plan.assignment.sub_mission,
+                        "assignedAisles": plan.assignment.assigned_aisles,
+                        "assignedTreeIndices": plan.assignment.assigned_tree_indices,
+                        "rationale": plan.assignment.rationale,
+                        "xml": plan_xml,
+                    }
+                )
+
+            # The first plan keeps `result` populated for anything still
+            # expecting the single-robot response shape.
+            result = plans_payload[0]["xml"]
+            tree_points_payload = (
+                _build_tree_points_payload(tree_points) if tree_points else None
+            )
+            fleet_payload = {
+                "plans": plans_payload,
+                "dispatch": [d.model_dump(mode="json") for d in dispatch_results],
+                "failures": fleet_result.failures,
+                "unassignedReason": fleet_result.allocation.unassigned_reason,
+            }
+        else:
+            file_xml_out = mp.run(text)
+            with open(file_xml_out, "r") as f:
+                result = f.read()
+
+            tree_points_payload = None
+            visit_points_payload = None
+            if tree_points:
+                tree_points_payload = _build_tree_points_payload(tree_points)
+                move_ids = _extract_move_to_tree_ids(result)
+                visit_points_payload = _build_visit_points(tree_points, move_ids)
+
             tcp_host = data.get("tcpHost") or network_cfg.get("host", "127.0.0.1")
             tcp_port_raw = data.get("tcpPort") or network_cfg.get("port", 12345)
             tcp_port = int(tcp_port_raw)
+            send_error = None
             nic = NetworkInterface(logger, tcp_host, tcp_port)
-            nic.init_socket()
-            tree_points = (
-                mp.tree_points
-                if hasattr(mp, "tree_points") and mp.tree_points
-                else None
-            )
-            nic.send_file(file_xml_out, tree_points)
-            nic.close_socket()
-        except Exception as exc:
-            logger.warning("TCP send failed: %s", exc)
+            try:
+                nic.init_socket()
+                nic.send_file(file_xml_out, tree_points)
+                ack = nic.recv_ack()
+                if ack is not None and not ack.get("accepted", False):
+                    send_error = ack.get("error") or "Robot rejected the mission."
+            except OSError as exc:
+                logger.warning("TCP send failed: %s", exc)
+                send_error = str(exc)
+            finally:
+                nic.close_socket()
+
+            # Previously a failed send was logged and the UI still reported
+            # success; surface it instead.
+            fleet_payload = {
+                "plans": [],
+                "dispatch": [
+                    {
+                        "robot_id": f"{tcp_host}:{tcp_port}",
+                        "outcome": "unreachable" if send_error else "dispatched",
+                        "host": tcp_host,
+                        "port": tcp_port,
+                        "mission_id": mission_id,
+                        "error": send_error,
+                    }
+                ],
+                "failures": {},
+                "unassignedReason": None,
+            }
 
         log_entry["response"] = result
 
@@ -956,11 +1181,37 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
             with open(xml_path, "w", encoding="utf-8") as f:
                 f.write(result)
 
-            tree_points = (
-                mp.tree_points
-                if hasattr(mp, "tree_points") and mp.tree_points
-                else None
-            )
+            # One file per robot so a fleet mission can be resent later.
+            robot_files: dict[str, str] = {}
+            for robot_id, plan_xml in plan_files:
+                robot_path = mission_dir / f"{mission_id}_{robot_id}_result.xml"
+                with open(robot_path, "w", encoding="utf-8") as f:
+                    f.write(plan_xml)
+                robot_files[robot_id] = robot_path.name
+
+            allocation_file = None
+            if fleet_payload and fleet_payload["plans"]:
+                allocation_path = mission_dir / f"{mission_id}_allocation.json"
+                with open(allocation_path, "w", encoding="utf-8") as f:
+                    json.dump(
+                        {
+                            "missionId": mission_id,
+                            "prompt": text,
+                            "plans": [
+                                {
+                                    k: v
+                                    for k, v in plan.items()
+                                    if k != "xml"
+                                }
+                                for plan in fleet_payload["plans"]
+                            ],
+                            "robotFiles": robot_files,
+                        },
+                        f,
+                        indent=2,
+                    )
+                allocation_file = allocation_path.name
+
             tree_path = None
             if tree_points is not None:
                 tree_path = mission_dir / f"{mission_id}_tree_points.json"
@@ -972,6 +1223,7 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
                 "requestFile": request_path.name,
                 "xmlFile": xml_path.name,
                 "treePointsFile": tree_path.name if tree_path else None,
+                "allocationFile": allocation_file,
             }
             mission_meta = {
                 "id": mission_id,
@@ -979,6 +1231,8 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
                 "createdAt": now,
                 "xmlFile": xml_path.name,
                 "treePointsFile": tree_path.name if tree_path else None,
+                "allocationFile": allocation_file,
+                "robotFiles": robot_files,
             }
 
         os.makedirs("logs", exist_ok=True)
@@ -992,6 +1246,8 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
             payload["visitPoints"] = visit_points_payload
         if mission_meta:
             payload["mission"] = mission_meta
+        if fleet_payload:
+            payload["fleet"] = fleet_payload
         yield json.dumps(payload) + "\n"
 
     return StreamingResponse(

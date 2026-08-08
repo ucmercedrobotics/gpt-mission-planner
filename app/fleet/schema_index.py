@@ -55,4 +55,6 @@ def hash_schema(stem: str, schemas_dir: Path = SCHEMAS_DIR) -> Optional[str]:
 
 def schema_hashes(schemas_dir: Path = SCHEMAS_DIR) -> dict[str, Optional[str]]:
     """stem -> sha256, for every XSD the planner has."""
-    return {stem: hash_schema(stem, schemas_dir) for stem in list_schema_stems(schemas_dir)}
+    return {
+        stem: hash_schema(stem, schemas_dir) for stem in list_schema_stems(schemas_dir)
+    }

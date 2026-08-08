@@ -123,7 +123,9 @@ def suggest_partition(
                 "lines": block,
                 "aisles": aisles,
                 "tree_count": len(tree_indices),
-                "tree_index_range": [tree_indices[0], tree_indices[-1]] if tree_indices else [],
+                "tree_index_range": (
+                    [tree_indices[0], tree_indices[-1]] if tree_indices else []
+                ),
                 "tree_indices": tree_indices,
             }
         )
@@ -269,7 +271,9 @@ class FleetAllocator:
         if not plan.assignments:
             if plan.unassigned_reason:
                 return
-            raise ValueError("No assignments were produced and no unassigned_reason was given.")
+            raise ValueError(
+                "No assignments were produced and no unassigned_reason was given."
+            )
 
         seen_robots: set[str] = set()
         claimed_aisles: dict[int, str] = {}

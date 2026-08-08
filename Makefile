@@ -2,6 +2,7 @@ IMAGE := ghcr.io/ucmercedrobotics/gpt-mission-planner
 WORKSPACE := gpt-mission-planner
 CONFIG := ./app/config/localhost.yaml
 WEB_PORT ?= 8002
+FLEET_PORT ?= 8003
 MISSION_PORT ?= 12346
 TARGET ?= prod
 CACHE_DIR ?= ./logs/.cache
@@ -47,7 +48,7 @@ bash:
 		-v ./test:/${WORKSPACE}/test:Z \
 		--env-file .env \
 		-p ${WEB_PORT}:${WEB_PORT} \
-		-p ${MISSION_PORT}:${MISSION_PORT}/udp \
+		-p ${FLEET_PORT}:${FLEET_PORT} \
 		${IMAGE} \
 		/bin/bash
 
@@ -71,5 +72,5 @@ prod:
 		-v ${CACHE_DIR}:/root/.cache:Z \
 		--env-file .env \
 		-p ${WEB_PORT}:${WEB_PORT} \
-		-p ${MISSION_PORT}:${MISSION_PORT}/udp \
+		-p ${FLEET_PORT}:${FLEET_PORT} \
 		${IMAGE}:latest

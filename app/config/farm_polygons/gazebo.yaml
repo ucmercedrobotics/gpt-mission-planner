@@ -12,6 +12,6 @@ points:
     lat: 37.36081618
 # draw this out from top (north) to bottom (south)
 dimensions:
-  - row: 18
-    col: 8
-traversal_axis: "column"
+  - row: 8
+    col: 18
+traversal_axis: "row"

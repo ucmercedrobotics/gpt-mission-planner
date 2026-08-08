@@ -114,7 +114,9 @@ class RobotRegistry:
         # Kept visible (as offline) long enough to be useful for debugging a
         # robot that dropped out, then forgotten.
         self.forget_after_s = (
-            float(forget_after_s) if forget_after_s is not None else max(300.0, self.ttl_s * 20)
+            float(forget_after_s)
+            if forget_after_s is not None
+            else max(300.0, self.ttl_s * 20)
         )
         self.registry_file = Path(registry_file) if registry_file else None
         # Injectable so tests can drive liveness without sleeping.
@@ -222,7 +224,9 @@ class RobotRegistry:
                     registered_at=self._clock(),
                 )
             except (KeyError, TypeError, ValueError) as exc:
-                self.logger.warning("Skipping malformed static robot %s: %s", entry, exc)
+                self.logger.warning(
+                    "Skipping malformed static robot %s: %s", entry, exc
+                )
                 continue
             with self._lock:
                 if record.robot_id in self._robots:
@@ -342,7 +346,11 @@ class RobotRegistry:
             for robot_id in doomed:
                 del self._robots[robot_id]
         for robot_id in doomed:
-            self.logger.info("Forgetting robot %s (no heartbeat in %.0fs)", robot_id, self.forget_after_s)
+            self.logger.info(
+                "Forgetting robot %s (no heartbeat in %.0fs)",
+                robot_id,
+                self.forget_after_s,
+            )
         if doomed:
             self._persist()
 
@@ -352,7 +360,9 @@ class RobotRegistry:
         try:
             self.registry_file.parent.mkdir(parents=True, exist_ok=True)
             with self._lock:
-                payload = [r.to_json() for r in self._robots.values() if r.source != "static"]
+                payload = [
+                    r.to_json() for r in self._robots.values() if r.source != "static"
+                ]
             tmp = self.registry_file.with_suffix(".tmp")
             with open(tmp, "w", encoding="utf-8") as handle:
                 json.dump(payload, handle, indent=2)

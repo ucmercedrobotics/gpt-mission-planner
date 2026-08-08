@@ -55,5 +55,7 @@ COPY ./app /gpt-mission-planner/app
 COPY ./schemas /gpt-mission-planner/schemas
 
 EXPOSE 8002
+# Fleet discovery: robots register and heartbeat here.
+EXPOSE 8003
 
 CMD ["uvicorn", "app.server:app", "--host", "0.0.0.0", "--port", "8002"]

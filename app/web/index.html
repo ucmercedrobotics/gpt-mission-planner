@@ -92,6 +92,13 @@
         </button>
         <section id="settingsPanel" class="card settings-panel is-hidden" aria-label="Settings" hidden>
           <div class="row">
+            <label for="targetMode">Target</label>
+            <select id="targetMode">
+              <option value="fleet">Auto (discovered fleet)</option>
+              <option value="manual">Manual host / port</option>
+            </select>
+          </div>
+          <div class="row" id="schemaRow">
             <label for="schema">Schema</label>
             <select id="schema"></select>
           </div>
@@ -115,11 +122,11 @@
               Save entire mission to logs
             </label>
           </div>
-          <div class="row">
+          <div class="row" id="tcpHostRow">
             <label for="tcpHost">TCP host</label>
             <input id="tcpHost" type="text" placeholder="127.0.0.1" />
           </div>
-          <div class="row">
+          <div class="row" id="tcpPortRow">
             <label for="tcpPort">TCP port</label>
             <input id="tcpPort" type="number" min="1" max="65535" placeholder="12345" />
           </div>
@@ -131,6 +138,17 @@
           </div>
         </section>
       </div>
+
+      <section class="card fleet-card" id="fleetCard" hidden>
+        <div class="fleet-header">
+          <span class="fleet-title">Fleet</span>
+          <span id="fleetSummary" class="fleet-summary"></span>
+        </div>
+        <ul id="fleetList" class="fleet-list"></ul>
+        <p id="fleetEmpty" class="fleet-empty" hidden>
+          No robots have reported in. Missions fall back to the manual TCP target.
+        </p>
+      </section>
 
       <section class="card">
         <div class="row">

@@ -59,7 +59,9 @@ def create_fleet_app(
 
     def _check_auth(token: Optional[str]) -> None:
         if auth_token and token != auth_token:
-            raise HTTPException(status_code=401, detail="Invalid or missing X-Fleet-Token")
+            raise HTTPException(
+                status_code=401, detail="Invalid or missing X-Fleet-Token"
+            )
 
     @app.get("/health")
     def health() -> dict[str, Any]:

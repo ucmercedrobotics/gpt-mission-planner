@@ -1198,11 +1198,7 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
                             "missionId": mission_id,
                             "prompt": text,
                             "plans": [
-                                {
-                                    k: v
-                                    for k, v in plan.items()
-                                    if k != "xml"
-                                }
+                                {k: v for k, v in plan.items() if k != "xml"}
                                 for plan in fleet_payload["plans"]
                             ],
                             "robotFiles": robot_files,

@@ -71,7 +71,11 @@ class FleetDispatcher:
     ) -> DispatchResult:
         host = robot.host or "127.0.0.1"
         nic = NetworkInterface(
-            self.logger, host, robot.port, timeout=self.timeout, ack_timeout=self.ack_timeout
+            self.logger,
+            host,
+            robot.port,
+            timeout=self.timeout,
+            ack_timeout=self.ack_timeout,
         )
         try:
             nic.init_socket()
@@ -109,7 +113,10 @@ class FleetDispatcher:
             )
 
         if not ack.get("accepted", False):
-            error = ack.get("error") or "Robot rejected the mission without giving a reason."
+            error = (
+                ack.get("error")
+                or "Robot rejected the mission without giving a reason."
+            )
             self.logger.error("%s rejected the mission: %s", robot.robot_id, error)
             return DispatchResult(
                 robot_id=robot.robot_id,
@@ -122,7 +129,11 @@ class FleetDispatcher:
             )
 
         self.logger.info(
-            "%s accepted mission %s (%s:%d)", robot.robot_id, mission_id, host, robot.port
+            "%s accepted mission %s (%s:%d)",
+            robot.robot_id,
+            mission_id,
+            host,
+            robot.port,
         )
         return DispatchResult(
             robot_id=robot.robot_id,

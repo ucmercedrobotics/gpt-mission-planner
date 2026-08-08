@@ -1,20 +1,24 @@
 import yaml
 from dataclasses import dataclass
 
+
 @dataclass
 class Point:
     lon: float
     lat: float
+
 
 @dataclass
 class Dimension:
     row: int
     col: int
 
+
 @dataclass
 class Polygon:
     points: list[Point]
     dimensions: list[Dimension]
+
 
 @dataclass
 class Config:

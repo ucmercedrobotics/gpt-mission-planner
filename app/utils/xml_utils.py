@@ -78,7 +78,9 @@ def validate_any(
         # failure, but let the real validator produce the message.
         declared = None
 
-    ordered = list(dict.fromkeys(([declared] if declared in schema_paths else []) + schema_paths))
+    ordered = list(
+        dict.fromkeys(([declared] if declared in schema_paths else []) + schema_paths)
+    )
 
     declared_error: Optional[str] = None
     first_error: Optional[str] = None
@@ -91,7 +93,11 @@ def validate_any(
         if first_error is None:
             first_error = message
 
-    error = declared_error or first_error or "XML did not validate against any known schema."
+    error = (
+        declared_error
+        or first_error
+        or "XML did not validate against any known schema."
+    )
     if declared and declared not in schema_paths:
         error = (
             f"Declared schema_location '{declared}' is not one of the available schemas "

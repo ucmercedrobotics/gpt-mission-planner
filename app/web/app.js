@@ -29,6 +29,14 @@ const loadSavedMissionBtn = document.getElementById("loadSavedMission");
 const sendSavedMissionBtn = document.getElementById("sendSavedMission");
 const clearSavedMissionBtn = document.getElementById("clearSavedMission");
 const clearAllMissionsBtn = document.getElementById("clearAllMissions");
+const targetModeSelect = document.getElementById("targetMode");
+const schemaRow = document.getElementById("schemaRow");
+const tcpHostRow = document.getElementById("tcpHostRow");
+const tcpPortRow = document.getElementById("tcpPortRow");
+const fleetCard = document.getElementById("fleetCard");
+const fleetList = document.getElementById("fleetList");
+const fleetSummary = document.getElementById("fleetSummary");
+const fleetEmpty = document.getElementById("fleetEmpty");
 
 let recording = false;
 let mediaRecorder = null;
@@ -41,6 +49,10 @@ let mapVisitLayer = null;
 let activeBaseLayer = "Satellite";
 let lastFitBounds = null;
 let mapResizeTimer = null;
+let fleetEnabled = false;
+let fleetEligibleCount = 0;
+let fleetPollTimer = null;
+const fleetPollIntervalMs = 3000;
 
 const defaultFetchTimeoutMs = 10000;
 
@@ -721,6 +733,149 @@ const setToastVisible = (visible) => {
   setHidden(xmlToast, !visible);
 };
 
+const targetMode = () => (targetModeSelect ? targetModeSelect.value : "manual");
+
+const applyTargetMode = () => {
+  const manual = targetMode() === "manual";
+  // In fleet mode the schema comes from whichever robots answered, and the
+  // address comes from their registration -- neither is the operator's to pick.
+  if (schemaRow) schemaRow.hidden = !manual;
+  if (tcpHostRow) tcpHostRow.hidden = !manual;
+  if (tcpPortRow) tcpPortRow.hidden = !manual;
+};
+
+const formatLastSeen = (seconds) => {
+  if (seconds === null || seconds === undefined) return "never";
+  if (seconds < 1) return "just now";
+  if (seconds < 60) return `${Math.round(seconds)}s ago`;
+  return `${Math.round(seconds / 60)}m ago`;
+};
+
+const renderFleet = (robots) => {
+  if (!fleetList) return;
+  fleetList.innerHTML = "";
+
+  robots.forEach((robot) => {
+    const item = document.createElement("li");
+    item.className = `fleet-item fleet-${robot.liveness}`;
+
+    const dot = document.createElement("span");
+    dot.className = "fleet-dot";
+    dot.title = robot.liveness;
+
+    const main = document.createElement("div");
+    main.className = "fleet-main";
+
+    const name = document.createElement("span");
+    name.className = "fleet-name";
+    name.textContent = robot.name || robot.robot_id;
+
+    const meta = document.createElement("span");
+    meta.className = "fleet-meta";
+    const bits = [robot.schema, `${robot.host || "?"}:${robot.port}`, robot.status];
+    if (robot.battery_pct !== null && robot.battery_pct !== undefined) {
+      bits.push(`${Math.round(robot.battery_pct * 100)}%`);
+    }
+    bits.push(formatLastSeen(robot.last_seen_s_ago));
+    meta.textContent = bits.join(" · ");
+
+    main.appendChild(name);
+    main.appendChild(meta);
+
+    const badge = document.createElement("span");
+    badge.className = robot.eligible ? "fleet-badge fleet-badge-ok" : "fleet-badge";
+    if (robot.eligible) {
+      badge.textContent = "ready";
+    } else if (!robot.schema_known) {
+      badge.textContent = "unknown schema";
+      badge.title = `The planner has no schemas/${robot.schema}.xsd`;
+    } else if (robot.liveness !== "online") {
+      badge.textContent = robot.liveness;
+    } else {
+      badge.textContent = robot.status;
+    }
+
+    item.appendChild(dot);
+    item.appendChild(main);
+    item.appendChild(badge);
+
+    if (robot.schema_matches === false) {
+      item.title = "This robot's copy of the schema differs from the planner's.";
+      item.classList.add("fleet-schema-drift");
+    }
+
+    fleetList.appendChild(item);
+  });
+
+  if (fleetEmpty) fleetEmpty.hidden = robots.length > 0;
+  if (fleetSummary) {
+    fleetSummary.textContent = robots.length
+      ? `${fleetEligibleCount} of ${robots.length} ready`
+      : "";
+  }
+};
+
+const fetchFleet = async () => {
+  try {
+    const data = await fetchJson("/robots", {}, { retries: 0, timeoutMs: 4000 });
+    fleetEnabled = Boolean(data.enabled);
+    const robots = Array.isArray(data.robots) ? data.robots : [];
+    fleetEligibleCount = robots.filter((r) => r.eligible).length;
+    if (fleetCard) fleetCard.hidden = !fleetEnabled;
+    if (fleetEnabled) renderFleet(robots);
+  } catch (err) {
+    // Discovery being briefly unreachable should not disturb the page.
+    if (fleetCard) fleetCard.hidden = true;
+  }
+};
+
+const startFleetPolling = () => {
+  fetchFleet();
+  if (fleetPollTimer) clearInterval(fleetPollTimer);
+  fleetPollTimer = setInterval(fetchFleet, fleetPollIntervalMs);
+};
+
+const renderDispatch = (fleet) => {
+  if (!fleet) return;
+  const lines = [];
+
+  (fleet.plans || []).forEach((plan) => {
+    lines.push(`# ${plan.robotId}  (${plan.schema})`);
+    lines.push(`# mission: ${plan.subMission}`);
+    if (plan.assignedAisles && plan.assignedAisles.length) {
+      lines.push(`# aisles: ${plan.assignedAisles.join(", ")}`);
+    }
+    lines.push(plan.xml.trim());
+    lines.push("");
+  });
+
+  (fleet.dispatch || []).forEach((entry) => {
+    const suffix = entry.error ? ` - ${entry.error}` : "";
+    lines.push(`# ${entry.robot_id}: ${entry.outcome} (${entry.host}:${entry.port})${suffix}`);
+  });
+
+  Object.entries(fleet.failures || {}).forEach(([robotId, error]) => {
+    lines.push(`# ${robotId}: no plan generated - ${error}`);
+  });
+
+  if (lines.length && resultOutput) {
+    resultOutput.value = lines.join("\n");
+  }
+};
+
+const summarizeDispatch = (fleet) => {
+  const entries = (fleet && fleet.dispatch) || [];
+  if (!entries.length) return null;
+  const ok = entries.filter(
+    (e) => e.outcome === "dispatched" || e.outcome === "unacknowledged"
+  ).length;
+  const failed = entries.length - ok;
+  if (failed === 0) {
+    return `Sent to ${ok} robot${ok === 1 ? "" : "s"}`;
+  }
+  return `Sent to ${ok} of ${entries.length}; ${failed} failed`;
+};
+
 const initLeafletMap = () => {
   if (!mapEl || !window.L) return;
   mapInstance = window.L.map(mapEl, {
@@ -836,9 +991,11 @@ const uploadAudio = async ({ durationMs, recordedBytes }) => {
 };
 
 const sendRequest = async ({ audioBlob, audioFilename = "audio.webm", includeText = true } = {}) => {
+  const mode = targetMode();
   const payload = {
     text: includeText && promptInput ? promptInput.value.trim() || null : null,
     schema: schemaSelect ? schemaSelect.value : null,
+    targetMode: mode,
     lintXml: lintXmlCheckbox ? lintXmlCheckbox.checked : true,
     saveMission: saveMissionCheckbox ? saveMissionCheckbox.checked : true,
     tcpHost: tcpHostInput ? tcpHostInput.value.trim() || null : null,
@@ -855,8 +1012,15 @@ const sendRequest = async ({ audioBlob, audioFilename = "audio.webm", includeTex
     payload.farmPolygonFile = selectedFarm;
   }
 
-  if (!payload.schema) {
-    setStatus("Please select a schema");
+  // In fleet mode the schemas come from the robots that answered. Only the
+  // manual path needs the operator to name one.
+  const usingFleet = mode === "fleet" && fleetEnabled && fleetEligibleCount > 0;
+  if (!usingFleet && !payload.schema) {
+    setStatus(
+      mode === "fleet"
+        ? "No robots are ready. Switch to manual, or start a robot."
+        : "Please select a schema"
+    );
     setMicState("mic-idle");
     return;
   }
@@ -930,6 +1094,13 @@ const sendRequest = async ({ audioBlob, audioFilename = "audio.webm", includeTex
           }
           if (message.visitPoints) {
             drawVisitPins(message.visitPoints);
+          }
+          if (message.fleet) {
+            renderDispatch(message.fleet);
+            const summary = summarizeDispatch(message.fleet);
+            if (summary) setStatus(summary);
+            // A robot may have flipped to busy on accepting this mission.
+            fetchFleet();
           }
         } catch (err) {
           console.error("Bad NDJSON", err);
@@ -1095,10 +1266,15 @@ if (clearAllMissionsBtn) {
     clearAllMissions();
   });
 }
+if (targetModeSelect) {
+  targetModeSelect.addEventListener("change", applyTargetMode);
+}
+applyTargetMode();
 fetchSchemas();
 fetchContextFiles();
 fetchFarmPolygons();
 fetchTcpDefaults();
+startFleetPolling();
 initLeafletMap();
 window.addEventListener("resize", scheduleFitToLastBounds);
 hydrateSavedMissionsFromServer();

@@ -190,10 +190,14 @@ class TreePlacementGenerator:
                 tree_counter += 1
 
         for (row_idx, col_idx), (x, y, idx) in positions.items():
-            next_col_key = (row_idx, col_idx + 1)
-            if next_col_key not in positions:
+            neighbor_key = (
+                (row_idx, col_idx + 1)
+                if self.traversal_axis == TraversalAxis.ROW
+                else (row_idx + 1, col_idx)
+            )
+            if neighbor_key not in positions:
                 continue
-            next_x, next_y, next_idx = positions[next_col_key]
+            next_x, next_y, next_idx = positions[neighbor_key]
             midpoint_x = (x + next_x) / 2
             midpoint_y = (y + next_y) / 2
             midpoint_lat, midpoint_lon = self._transform_to_global_coords(

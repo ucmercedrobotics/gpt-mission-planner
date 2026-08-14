@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import socket
@@ -8,6 +9,7 @@ from gpt_interface import LLMInterface
 from utils.os_utils import (
     execute_shell_cmd,
     write_out_file,
+    write_out_binary_file,
 )
 from utils.xml_utils import (
     parse_code,
@@ -194,6 +196,18 @@ class MissionPlanner:
     def get_promela_output_path(self) -> str:
         return self.promela_path
 
+    def _capture_payload(self, xml_out: str) -> str:
+        """Log the entire wire payload (XML + tree-points JSON), not just the XML.
+
+        Mirrors what `NetworkInterface.send_file` actually puts on the socket, so
+        the capture in `self.log_directory` can be inspected/replayed with
+        `scripts/bin_to_kml.py`.
+        """
+        chunks = [xml_out.encode("utf-8")]
+        if self.tree_points:
+            chunks.append(json.dumps(self.tree_points).encode("utf-8"))
+        return write_out_binary_file(self.log_directory, chunks)
+
     def set_schema_paths(self, schema_paths: list[str]) -> None:
         """Re-point the session at a different set of schemas.
 
@@ -241,6 +255,8 @@ class MissionPlanner:
                 # store file for logs
                 file_xml_out = write_out_file(self.log_directory, xml_out)
                 self.logger.debug(f"Wrote out temp XML file: {file_xml_out}")
+                file_payload_out = self._capture_payload(xml_out)
+                self.logger.debug(f"Wrote out full payload capture: {file_payload_out}")
                 self.xml_valid = True
             if not self.ltl_valid and self.ltl:
                 try:
@@ -369,6 +385,12 @@ class MissionPlanner:
             file_xml_out = write_out_file(self.log_directory, xml_out)
             self.logger.debug(
                 "Wrote out temp XML file for %s: %s", assignment.robot_id, file_xml_out
+            )
+            file_payload_out = self._capture_payload(xml_out)
+            self.logger.debug(
+                "Wrote out full payload capture for %s: %s",
+                assignment.robot_id,
+                file_payload_out,
             )
             plans.append(
                 RobotPlan(

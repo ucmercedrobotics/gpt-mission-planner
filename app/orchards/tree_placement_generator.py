@@ -191,9 +191,9 @@ class TreePlacementGenerator:
 
         for (row_idx, col_idx), (x, y, idx) in positions.items():
             neighbor_key = (
-                (row_idx, col_idx + 1)
+                (row_idx + 1, col_idx)
                 if self.traversal_axis == TraversalAxis.ROW
-                else (row_idx + 1, col_idx)
+                else (row_idx, col_idx + 1)
             )
             if neighbor_key not in positions:
                 continue

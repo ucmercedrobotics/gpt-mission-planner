@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import socket
@@ -8,14 +9,15 @@ from gpt_interface import LLMInterface
 from utils.os_utils import (
     execute_shell_cmd,
     write_out_file,
+    write_out_binary_file,
 )
 from utils.xml_utils import (
-    parse_schema_location,
     parse_code,
-    validate_output,
+    validate_any,
     count_xml_tasks,
 )
 from orchards.tree_placement_generator import TreePlacementGenerator
+from fleet.schema_index import schema_path
 
 OPENAI: str = "openai/gpt-5.2"
 ANTHROPIC: str = "claude-sonnet-4-20250514"
@@ -92,6 +94,8 @@ class MissionPlanner:
         # keeping track of validation status
         self.xml_valid: bool = False
         self.ltl_valid: bool = False
+        # set by _lint_xml: which XSD actually accepted the most recent plan
+        self.last_matched_schema: str | None = None
         # max number of times that GPT can try and fix the mission plan
         self.max_retries: int = self.config.max_retries
         # retry count, managed globally to track all failures
@@ -192,6 +196,32 @@ class MissionPlanner:
     def get_promela_output_path(self) -> str:
         return self.promela_path
 
+    def _capture_payload(self, xml_out: str) -> str:
+        """Log the entire wire payload (XML + tree-points JSON), not just the XML.
+
+        Mirrors what `NetworkInterface.send_file` actually puts on the socket, so
+        the capture in `self.log_directory` can be inspected/replayed with
+        `scripts/bin_to_kml.py`.
+        """
+        chunks = [xml_out.encode("utf-8")]
+        if self.tree_points:
+            chunks.append(json.dumps(self.tree_points).encode("utf-8"))
+        return write_out_binary_file(self.log_directory, chunks)
+
+    def set_schema_paths(self, schema_paths: list[str]) -> None:
+        """Re-point the session at a different set of schemas.
+
+        Called when fleet membership changes between missions. Deduplicated,
+        because two robots on the same platform must not put two copies of the
+        same XSD into the prompt.
+        """
+        deduped = list(dict.fromkeys(schema_paths))
+        if not deduped or deduped == self.schema_paths:
+            return
+        self.logger.info("Planning against schemas: %s", ", ".join(deduped))
+        self.schema_paths = deduped
+        self.gpt.init_context(self.schema_paths, self.context_files, self.context_vars)
+
     def reset(self) -> None:
         self.retry = 0
         self.xml_valid = False
@@ -210,7 +240,7 @@ class MissionPlanner:
             if not self.xml_valid:
                 try:
                     ret, xml_out, xml_task_count = self._generate_xml(
-                        xml_input, self.ltl, False
+                        xml_input, self.ltl, self.lint_xml
                     )
                 except Exception as e:
                     self.logger.debug(f"Error generating XML: {e}")
@@ -225,6 +255,8 @@ class MissionPlanner:
                 # store file for logs
                 file_xml_out = write_out_file(self.log_directory, xml_out)
                 self.logger.debug(f"Wrote out temp XML file: {file_xml_out}")
+                file_payload_out = self._capture_payload(xml_out)
+                self.logger.debug(f"Wrote out full payload capture: {file_payload_out}")
                 self.xml_valid = True
             if not self.ltl_valid and self.ltl:
                 try:
@@ -304,8 +336,135 @@ class MissionPlanner:
 
         return file_xml_out
 
+    def run_fleet(self, prompt: str, robots: list, mission_id: str) -> Any:
+        """Plan one mission across several robots.
+
+        Runs as a sequence of turns on a single LLM session: the expensive
+        prefix (system prompt, the deduplicated schemas, the orchard map) is
+        already in `self.gpt` from __init__, so allocation and each robot's
+        plan are cheap follow-ups. Because context accumulates, each robot's
+        turn can see the plans written for the robots before it, which is what
+        keeps them from covering the same ground.
+
+        A validation failure retries only that robot's turn -- one robot's bad
+        plan does not throw away the fleet's work.
+        """
+        from fleet.allocator import FleetAllocator
+        from fleet.models import FleetMissionResult, RobotPlan
+
+        if self.ltl:
+            # SPIN/Promela verification is built around a single mission plan.
+            self.logger.warning(
+                "Formal verification is not supported for multi-robot missions; "
+                "generating fleet plans without it."
+            )
+
+        by_id = {r.robot_id: r for r in robots}
+        allocator = FleetAllocator(self.logger, max_retries=self.max_retries)
+        allocation = allocator.allocate(self.gpt, prompt, robots, self.tree_points)
+
+        plans: list[RobotPlan] = []
+        failures: dict[str, str] = {}
+
+        for assignment in allocation.assignments:
+            robot = by_id.get(assignment.robot_id)
+            if robot is None:
+                # allocator._check_plan already rejects unknown ids; belt and braces.
+                failures[assignment.robot_id] = "Robot is no longer in the roster."
+                continue
+
+            expected_schema = schema_path(robot.schema_name)
+            ok, xml_out = self._generate_for_robot(assignment, robot, expected_schema)
+            if not ok:
+                failures[assignment.robot_id] = xml_out
+                self.logger.error(
+                    "Giving up on a plan for %s: %s", assignment.robot_id, xml_out
+                )
+                continue
+
+            file_xml_out = write_out_file(self.log_directory, xml_out)
+            self.logger.debug(
+                "Wrote out temp XML file for %s: %s", assignment.robot_id, file_xml_out
+            )
+            file_payload_out = self._capture_payload(xml_out)
+            self.logger.debug(
+                "Wrote out full payload capture for %s: %s",
+                assignment.robot_id,
+                file_payload_out,
+            )
+            plans.append(
+                RobotPlan(
+                    robot_id=assignment.robot_id,
+                    xml_path=file_xml_out,
+                    matched_schema=self.last_matched_schema or expected_schema,
+                    assignment=assignment,
+                )
+            )
+
+        # clear before new query
+        self.gpt.reset_context(self.gpt.initial_context_length)
+
+        return FleetMissionResult(
+            mission_id=mission_id,
+            plans=plans,
+            allocation=allocation,
+            failures=failures,
+        )
+
+    def _generate_for_robot(
+        self, assignment: Any, robot: Any, expected_schema: str
+    ) -> Tuple[bool, str]:
+        """Generate and validate one robot's behavior tree. Returns (ok, xml_or_error)."""
+        actions = (
+            ", ".join(robot.actions)
+            if robot.actions
+            else "every action defined in that schema"
+        )
+        prompt = (
+            f"Now generate the behavior tree for robot '{robot.robot_id}'"
+            f"{f' ({robot.name})' if robot.name else ''}.\n"
+            f"This robot runs the schema at '{expected_schema}'. Use ONLY actions from that "
+            f"schema and set schema_location to exactly '{expected_schema}'.\n"
+            f"Actions this robot can execute: {actions}.\n"
+            f"Its mission is: {assignment.sub_mission}\n"
+            "Output only the XML for this one robot."
+        )
+
+        last_error = "Generation was never attempted."
+        for attempt in range(self.max_retries):
+            try:
+                ok, xml_out, _ = self._generate_xml(
+                    prompt, False, self.lint_xml, expected_schema
+                )
+            except Exception as exc:
+                last_error = str(exc)
+                self.logger.debug(
+                    "Error generating XML for %s: %s", robot.robot_id, last_error
+                )
+                prompt = last_error
+                continue
+
+            if ok:
+                return True, xml_out
+
+            # _generate_xml puts the validation error in xml_out on failure.
+            last_error = xml_out
+            self.logger.warning(
+                "Plan for %s failed validation (attempt %d/%d)",
+                robot.robot_id,
+                attempt + 1,
+                self.max_retries,
+            )
+            prompt = xml_out
+
+        return False, last_error
+
     def _generate_xml(
-        self, prompt: str, count: bool = False, validate: bool = True
+        self,
+        prompt: str,
+        count: bool = False,
+        validate: bool = True,
+        expected_schema: str | None = None,
     ) -> Tuple[bool, str, int]:
         task_count: int = 0
         ret: bool = True
@@ -316,7 +475,7 @@ class MissionPlanner:
         if not validate:
             return True, xml, task_count
 
-        ret, e = self._lint_xml(xml)
+        ret, e = self._lint_xml(xml, expected_schema)
         if not ret:
             xml = e
             self.logger.warning(f"Failure to lint XML: {e}")
@@ -358,16 +517,39 @@ class MissionPlanner:
 
         return aut
 
-    def _lint_xml(self, xml_out: str) -> Tuple[bool, str]:
-        # path to selected schema based on xsi:schemaLocation
-        selected_schema: str = parse_schema_location(xml_out)
-        self.logger.debug(f"Schema selected by GPT: {selected_schema}")
-        # validate mission based on XSD
-        ret, e = validate_output(selected_schema, xml_out)
+    def _lint_xml(
+        self, xml_out: str, expected_schema: str | None = None
+    ) -> Tuple[bool, str]:
+        """Validate against every schema in play, not just the declared one.
+
+        `schema_location` is model-authored text, so it is a hint rather than
+        ground truth. When `expected_schema` is given (fleet mode: the schema of
+        the robot this plan was generated for), a plan that validates against
+        some *other* platform's schema is treated as a failure -- the model
+        planned for the wrong robot.
+
+        Sets `self.last_matched_schema` to whichever XSD accepted the document.
+        """
+        ret, matched, e = validate_any(self.schema_paths, xml_out)
+        self.last_matched_schema = matched
+
+        if ret and expected_schema is not None and matched != expected_schema:
+            self.logger.error(
+                "Plan validated against %s but was generated for a robot running %s",
+                matched,
+                expected_schema,
+            )
+            return False, (
+                f"This mission plan validates against '{matched}', but it must be written for "
+                f"the robot's own platform, whose schema is '{expected_schema}'. "
+                f"Regenerate it using only actions from '{expected_schema}' and set "
+                f"schema_location to exactly that path."
+            )
 
         # check if we have a valid XML
         if ret:
             self.logger.info("Successful XML mission plan generation...")
+            self.logger.debug(f"Validated against schema: {matched}")
         else:
             self.logger.error(
                 f"Unable to generate mission plan from your prompt... error: {e}"

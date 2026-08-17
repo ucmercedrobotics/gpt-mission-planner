@@ -39,3 +39,19 @@ network:
   tcp:
     host: 172.17.0.1
     port: 12346
+
+fleet:
+  # Flip to true to let robots self-register instead of using network.tcp above.
+  enabled: false
+  discovery:
+    host: "0.0.0.0"
+    port: 8003
+    heartbeat_ttl_s: 15
+    stale_after_s: 8
+  auth_token: null
+  registry_file: "logs/robots.json"
+  static_robots: []
+  allocation:
+    require_idle: true
+    min_battery_pct: 0.2
+    max_robots_per_mission: 4

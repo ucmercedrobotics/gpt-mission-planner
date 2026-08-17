@@ -1,0 +1,64 @@
+You are now acting as a fleet allocator. Do NOT generate a behavior tree in this step.
+
+Divide the following mission across the robots that are currently online. You will be asked to
+generate each robot's behavior tree separately, afterwards, one robot at a time.
+
+MISSION:
+{{ mission }}
+
+ROBOTS ONLINE ({{ robot_count }}):
+{% for robot in robots %}
+- robot_id: {{ robot.robot_id }}
+  name: {{ robot.name }}
+  schema: {{ robot.schema }}
+{% if robot.actions %}
+  supported actions: {{ robot.actions | join(", ") }}
+{% else %}
+  supported actions: every action in its schema
+{% endif %}
+  status: {{ robot.status }}{% if robot.battery_pct is not none %}, battery: {{ (robot.battery_pct * 100) | round(0) | int }}%{% endif %}
+
+{% endfor %}
+{% if orchard %}
+ORCHARD:
+- {{ orchard.rows }} rows x {{ orchard.cols }} columns, {{ orchard.tree_count }} trees total
+- tree_index runs {{ orchard.tree_index_min }} to {{ orchard.tree_index_max }}
+- traversal axis: {{ orchard.traversal_axis }} (robots drive along {{ orchard.line_key }}s)
+- aisles are the driving lanes BETWEEN tree {{ orchard.line_key }}s, numbered 1 to {{ orchard.aisle_count }};
+  aisle k lies between {{ orchard.line_key }} k and {{ orchard.line_key }} k+1
+{% endif %}
+{% if suggested_partition %}
+SUGGESTED BALANCED SPLIT (already computed for you, use it unless the mission calls for something else):
+{% for block in suggested_partition %}
+- {{ block.line_key }}s {{ block.line_range[0] }}-{{ block.line_range[1] }}: {{ block.tree_count }} trees (tree_index {{ block.tree_index_range[0] }}-{{ block.tree_index_range[1] }}), interior aisles {{ block.aisles | join(", ") if block.aisles else "none" }}
+{% endfor %}
+{% endif %}
+
+RULES:
+1. Give each robot AT MOST ONE assignment. Do not list a robot twice.
+2. Only assign work a robot's schema and supported actions can actually perform. If a robot cannot
+   contribute to this mission, leave it out entirely.
+3. Two robots must NEVER be assigned the same aisle. Keep each robot's area contiguous.
+4. Balance the work by tree count, not by area, unless the mission says otherwise.
+5. If the mission names a specific quantity of targets, the assignments together must cover exactly
+   that quantity - no more, no less, and no overlap.
+6. If only one robot can do the work, give it the entire mission.
+7. If no robot can do the work, return an empty assignments list and explain why in unassigned_reason.
+8. Each sub_mission must be a complete, self-contained instruction written the way the operator
+   would phrase it. The robot generating from it will NOT see this allocation or the other robots'
+   assignments, so never write "the rest", "the other half", or "continue from robot 1".
+
+Respond with a single JSON object and nothing else. No prose, no markdown fence, no comments.
+
+{
+  "assignments": [
+    {
+      "robot_id": "<one of the robot_ids listed above>",
+      "sub_mission": "<self-contained instruction for this robot>",
+      "assigned_aisles": [<aisle numbers this robot owns, may be empty>],
+      "assigned_tree_indices": [<tree_index values this robot is responsible for, may be empty>],
+      "rationale": "<one short sentence>"
+    }
+  ],
+  "unassigned_reason": null
+}

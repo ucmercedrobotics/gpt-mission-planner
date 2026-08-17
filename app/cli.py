@@ -1,4 +1,5 @@
 import logging
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +9,10 @@ import click
 from mission_planner import MissionPlanner, MissionPlannerConfig, ModelRoutingConfig
 from orchards.tree_placement_generator import TreePlacementGenerator
 from network_interface import NetworkInterface
+from fleet.config import build_registry, eligible_robots, load_fleet_config
+from fleet.dispatcher import FleetDispatcher
+from fleet.schema_index import schema_path
+from fleet.service import start_fleet_service
 
 
 @click.command()
@@ -171,19 +176,94 @@ def main(config: str):
     except yaml.YAMLError as exc:
         logger.error(f"Improper YAML config: {exc}")
 
+    fleet_cfg = load_fleet_config(config_yaml)
+    registry = None
+    dispatcher = None
+    if fleet_cfg.enabled:
+        registry = build_registry(fleet_cfg, logger)
+        start_fleet_service(
+            registry, logger, fleet_cfg.host, fleet_cfg.port, fleet_cfg.auth_token
+        )
+        dispatcher = FleetDispatcher(logger)
+
     nic = NetworkInterface(logger, network_cfg["host"], int(network_cfg["port"]))
 
     while True:
         mp_input = input("Enter the specifications for your mission plan: ")
+
+        robots = eligible_robots(registry, fleet_cfg) if registry else []
+        if robots:
+            _run_fleet_mission(mp, robots, registry, dispatcher, mp_input, logger)
+            continue
+
+        if fleet_cfg.enabled:
+            logger.warning(
+                "No robots have reported in; falling back to %s:%s from network.tcp",
+                network_cfg["host"],
+                network_cfg["port"],
+            )
+
         file_xml_out = mp.run(mp_input)
 
-        nic.init_socket()
         # Send XML and tree points if available
         tree_points = (
             mp.tree_points if hasattr(mp, "tree_points") and mp.tree_points else None
         )
-        nic.send_file(file_xml_out, tree_points)
-        nic.close_socket()
+        try:
+            nic.init_socket()
+            nic.send_file(file_xml_out, tree_points)
+            ack = nic.recv_ack()
+            if ack is not None and not ack.get("accepted", False):
+                logger.error("Robot rejected the mission: %s", ack.get("error"))
+            else:
+                logger.info("Mission sent to %s:%s", nic.host, nic.port)
+        except OSError as exc:
+            # Previously an unreachable robot raised straight out of the REPL.
+            logger.error("Could not send mission to %s:%s: %s", nic.host, nic.port, exc)
+        finally:
+            nic.close_socket()
+
+
+def _run_fleet_mission(mp, robots, registry, dispatcher, mp_input, logger) -> None:
+    """Plan across the discovered robots and send each its own tree."""
+    logger.info(
+        "Planning across %d robot(s): %s",
+        len(robots),
+        ", ".join(f"{r.robot_id} ({r.schema_name})" for r in robots),
+    )
+    # Deduplicated: two robots on the same platform contribute one copy of the XSD.
+    mp.set_schema_paths([schema_path(r.schema_name) for r in robots])
+
+    mission_id = uuid.uuid4().hex[:8]
+    try:
+        result = mp.run_fleet(mp_input, robots, mission_id)
+    except Exception as exc:
+        logger.error("Fleet planning failed: %s", exc)
+        return
+
+    if not result.plans:
+        logger.error(
+            "No plans were produced. %s",
+            result.allocation.unassigned_reason or "See the errors above.",
+        )
+        return
+
+    for robot_id, error in result.failures.items():
+        logger.error("No plan for %s: %s", robot_id, error)
+
+    tree_points = mp.tree_points if getattr(mp, "tree_points", None) else None
+    results = dispatcher.dispatch(
+        result.plans, {r.robot_id: r for r in robots}, mission_id, tree_points
+    )
+    for outcome in results:
+        logger.info(
+            "%s -> %s (%s:%d)%s",
+            outcome.robot_id,
+            outcome.outcome.value,
+            outcome.host,
+            outcome.port,
+            f" - {outcome.error}" if outcome.error else "",
+        )
 
 
 if __name__ == "__main__":

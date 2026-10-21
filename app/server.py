@@ -20,7 +20,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from openai import OpenAI
 
 from mission_planner import MissionPlanner, MissionPlannerConfig, ModelRoutingConfig
 from network_interface import NetworkInterface
@@ -159,7 +158,6 @@ class GenerateRequest(BaseModel):
     text: str | None
 
 
-_openai_client = None
 _whisper_model = None
 
 CONTENT_TYPE_EXTENSION_MAP: dict[str, str] = {
@@ -379,23 +377,7 @@ def _extract_tree_points_from_bin(
 
 
 def transcribe(path: str) -> str:
-    provider = os.getenv("STT_PROVIDER", "openai").lower()
-    if provider == "local":
-        return transcribe_local(path)
-    return transcribe_openai(path)
-
-
-def transcribe_openai(path: str) -> str:
-    global _openai_client
-    if _openai_client is None:
-        _openai_client = OpenAI()
-    with open(path, "rb") as audio_file:
-        transcript = _openai_client.audio.transcriptions.create(
-            model=os.getenv("STT_MODEL", "gpt-4o-mini-transcribe"),
-            file=audio_file,
-            prompt="The user is a farmer speaking instructions for an ag-tech robot.",
-        )
-        return transcript.text
+    return transcribe_local(path)
 
 
 def transcribe_local(path: str) -> str:

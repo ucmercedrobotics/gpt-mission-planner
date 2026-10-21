@@ -25,7 +25,6 @@ If using formal verification, add an Anthropic key.
 You may also configure the speech-to-text models if you wish.
 Below are what you should place as default defaults:
 ```bash
-STT_PROVIDER=local
 WHISPER_MODEL=small
 WHISPER_DEVICE=cpu
 WHISPER_COMPUTE_TYPE=int8

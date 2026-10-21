@@ -1,0 +1,10 @@
+<root BTCPP_format="4" schema_location="schemas/amiga_btcpp.xsd">
+  <Mission>Can you please turn your arm 90 degrees to the right?</Mission>
+  <BehaviorTree ID="MainTree">
+    <RetryUntilSuccessful num_attempts="3">
+      <Sequence>
+        <MoveArmToPosition name="TurnArmRight90" action_name="/move_to" movement_link="end_effector_link" pitch="-1.5708"/>
+      </Sequence>
+    </RetryUntilSuccessful>
+  </BehaviorTree>
+</root>

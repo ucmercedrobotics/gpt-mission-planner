@@ -233,7 +233,7 @@ is used as a cross-check — a plan generated for an Amiga that only validates a
 
 ```bash
 # terminal 1 - planner (needs fleet.enabled: true in the config)
-make webapp
+make prod
 
 # terminals 2 and 3 - two robots on different BT ports
 python3 scripts/mock_robot.py --robot-id amiga-01 --bt-port 12346 --planner http://localhost:8003
@@ -250,8 +250,7 @@ to imitate a receiver that predates the ack frame, `--schema clearpath_husky` to
 fleet, and `--print-xml` to dump the behavior tree it received.
 
 If your real BT executor is already listening on the port, pass `--no-listen` and the mock becomes
-a discovery client only — registration and heartbeats — while missions go to your executor. That
-is the same role [`scripts/bot.py`](../scripts/bot.py) fills:
+a discovery client only — registration and heartbeats — while missions go to your executor:
 
 ```bash
 python3 scripts/mock_robot.py --robot-id amiga-01 --bt-port 12346 --no-listen

@@ -1,40 +1,36 @@
+{% set crop_rows = farm_polygon.dimensions[0].row %}
+{% set aisles = crop_rows - 1 %}
+{% if farm_polygon.row_orientation | default("east_west") == "north_south" %}
+{% set row_direction = "north to south" %}
+{% set numbering = "west to east" %}
+{% set ends = "north and south" %}
+{% else %}
+{% set row_direction = "west to east" %}
+{% set numbering = "north to south" %}
+{% set ends = "west and east" %}
+{% endif %}
 FARM LAYOUT:
-Polygon corners (approximate GPS coordinates):
 
-Top Left (NW): 36.85817019481476, -119.62189612180204
+Field boundary (GPS):
+{% for point in farm_polygon.points %}
+{{ point.lat }}, {{ point.lon }}
+{% endfor %}
 
-Top Right (NE): 36.858163689066394, -119.62092447481069
+Crop rows: {{ crop_rows }}, running {{ row_direction }}, numbered 1 to {{ crop_rows }} from {{ numbering }}.
+Aisles: {{ aisles }}, numbered 1 to {{ aisles }} from {{ numbering }}.
+Aisle k lies between crop row k and crop row k+1. Each aisle has a head at its {{ ends }} ends.
+Missions refer to whole crop rows, not individual plants.
 
-Bottom Left (SW): 36.857415524310504, -119.62188392539628
-
-Bottom Right (SE): 36.85740088623136, -119.62093260574784
-
-The field dimensions are approximately:
-Width (NW → NE, west ↔ east): 86.7 m
-Height (NW → SW, north ↔ south): 83.8 m
-All rows go from north to south.
-Assume plant rows are 1 meter apart by default unless EXPLICTLY told.
-Do NOT send robots outside of these boundaries.
-
-MOVEMENT RULES:
-- Do NOT interpolate or invent GPS coordinates.
-- Only use GPS points explicitly provided in the mission or polygon.
-- If a move requires a GPS offset (e.g., 5 m forward), use relative movement instead of fabricating new latitude/longitude.
-- There should always be an orientation in between each movement: movement -> orientation -> actions -> movement
-- don't include explicit end movements, just terminate when finished
-
-TURNING RULES:
-Orientation control in yaw (rotation around vertical axis).
-If absolute=true, yaw is with respect to true north
-0 rad = north, pi/2 rad = west, -pi/2 rad = east, pi or -pi = south.
-If absolute=false, yaw is relative to the current heading
-0 rad = forward, pi/2 rad = left, -pi/2 rad = right, pi or -pi = backward.
-
-Relative movement in the robot's local body frame.
-+X is always "forward" relative to the current heading,
--X is backward.
+RULES:
+- You CANNOT drive across crop rows. Travel only along aisles.
+- Use MoveToAisleHead to move. Do NOT use GPS or relative movements.
+- Enter an aisle with MoveToAisleHead, then exit it with MoveToAisleHead using the same aisle id. Exiting drives the robot down the whole aisle to the opposite head.
+- To change aisles, exit the current aisle first, then enter the next one.
+- Do NOT add a final return movement. End the mission when the last task is done.
 
 SEEDER RULES:
-- robot can plant from either side of the row
-- move -> orient -> select seed -> activate seeder -> move to plant -> deactivate -> orient (if planting another row)
-- if planting more than 1 of the same plant, no need to select seed again
+- Crop row k can be planted from aisle k-1 or aisle k (row 1 only from aisle 1, row {{ crop_rows }} only from aisle {{ aisles }}).
+- To plant a row: enter aisle -> select seed -> activate seeder -> plant seed -> deactivate seeder -> exit aisle.
+- If the next row uses the same seed, do NOT select the seed again.
+
+USE THIS INFORMATION TO CREATE THE XML MISSION.

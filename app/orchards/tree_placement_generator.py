@@ -225,11 +225,13 @@ class TreePlacementGenerator:
         """Create a 2D array representing the dimensions of the planting area."""
         shape = []
         for d in dimensions:
-            if len(d) != 2 or "row" not in d or "col" not in d:
+            if "row" not in d:
                 raise ValueError(
-                    "Each dimension must be a dictionary with 'row' and 'col' keys."
+                    "Each dimension must be a dictionary with a 'row' key."
                 )
-            col = d["col"]
+            # Row crops leave out 'col' since plants per row change each season;
+            # a single placeholder point per row keeps the aisle geometry intact.
+            col = d.get("col", 1)
             row = d["row"]
             # Create a 2D array for each dimension
             shape += [col] * row

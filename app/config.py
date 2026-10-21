@@ -11,7 +11,7 @@ class Point:
 @dataclass
 class Dimension:
     row: int
-    col: int
+    col: int = 1
 
 
 @dataclass

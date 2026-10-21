@@ -1,0 +1,19 @@
+# NOTE: points must go around the field clockwise.
+#       crop rows are laid out parallel to the first edge (points[0] -> points[1]),
+#       so this field starts at the south west corner to make rows run north to south,
+#       numbered west to east.
+points:
+  - lon: -119.62188392539628
+    lat: 36.857415524310504
+  - lon: -119.62189612180204
+    lat: 36.85817019481476
+  - lon: -119.62092447481069
+    lat: 36.858163689066394
+  - lon: -119.62093260574784
+    lat: 36.85740088623136
+# number of crop rows.
+dimensions:
+  - row: 10
+traversal_axis: "row"
+# compass direction the crop rows run in, used by the row crop prompt.
+row_orientation: "north_south"

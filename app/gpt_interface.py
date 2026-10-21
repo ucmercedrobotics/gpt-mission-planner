@@ -39,15 +39,8 @@ class LLMInterface:
         # input template file provided when wanting spin verification
         self.promela_template: str = ""
         self.context_template: str = context_template
-        self.temperature: float = temperature
         self.api_base: str | None = api_base
-        self.reasoning: str | None = None
-        if "openai" in self.model:
-            self.logger.warning(
-                f"Using OpenAI model: {self.model}, which requires temperature {OPENAI_TEMP}"
-            )
-            self.temperature = OPENAI_TEMP
-            self.reasoning = REASONING
+        self.reasoning: str | None = REASONING
 
     def init_context(
         self,
@@ -118,8 +111,6 @@ class LLMInterface:
             payload = {
                 "model": self.model,
                 "messages": message,
-                "temperature": self.temperature,
-                "reasoning_effort": self.reasoning,
                 "max_tokens": self.max_tokens,
             }
             self.logger.debug(
@@ -132,8 +123,6 @@ class LLMInterface:
                 cmp = completion(
                     model=self.model,
                     messages=message,
-                    temperature=self.temperature,
-                    reasoning_effort=self.reasoning,
                     max_tokens=self.max_tokens,
                     api_base=self.api_base,
                 )

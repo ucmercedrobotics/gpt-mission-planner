@@ -35,14 +35,16 @@ llm:
     offline_api_base: "http://172.17.0.1:8000/v1"
 
 mission:
-  log_directory: "./app/gpt_outputs/icra2027"
+  log_directory: "./app/gpt_outputs/dtrap"
   schema_paths:
     - "schemas/amiga_btcpp.xsd"
   context_files:
-    - "./app/resources/context/prompts/mission_planner/wheeled/orchard.j2"
-    - "./app/resources/context/prompts/mission_planner/manipulators/kinova.txt"
+    # - "./app/resources/context/prompts/mission_planner/wheeled/orchard.j2"
+    # - "./app/resources/context/prompts/mission_planner/manipulators/kinova.txt"
+    - "./app/resources/context/prompts/mission_planner/wheeled/thompson_rows.j2"
   farm:
-    polygon_file: "farm_polygons/reza_medium.yaml"
+    polygon_file: "farm_polygons/thompson.yaml"
+    # polygon_file: "farm_polygons/reza_medium.yaml"
 
 network:
   tcp:
@@ -50,7 +52,7 @@ network:
     port: 12346
 
 fleet:
-  enabled: true
+  enabled: false
   discovery:
     host: "0.0.0.0"
     port: 8003

@@ -51,7 +51,7 @@ class LLMInterface:
                 if reasoning_effort and reasoning_effort != "none"
                 else {}
             )
-
+            
     def init_context(
         self,
         schema_paths: list[str],

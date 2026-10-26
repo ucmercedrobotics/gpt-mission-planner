@@ -1,0 +1,8 @@
+<root BTCPP_format="4" schema_location="schemas/amiga_btcpp.xsd">
+  <Mission>Can you follow me please?</Mission>
+  <BehaviorTree ID="MainTree">
+    <Sequence>
+      <FollowPerson name="Follow_Person" action_name="follow_person"/>
+    </Sequence>
+  </BehaviorTree>
+</root>

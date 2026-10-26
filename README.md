@@ -20,12 +20,13 @@ OPENAI_API_KEY=<my_token_here>
 ANTHROPIC_API_KEY=<my_token_here>
 ```
 By default, XML planning uses OpenAI and is the only key required.
-If using formal verification, add an Anthropic key.
+If using formal verification, add an Anthropic key: the default config uses Anthropic models for LTL generation and the arbiter.
+Models can also run offline against a local LiteLLM-compatible server (e.g. vLLM) via `llm.routing.mode` (`online`, `offline`, or `auto`).
+See [app/config/README.md](app/config/README.md) for every config option.
 
 You may also configure the speech-to-text models if you wish.
 Below are what you should place as default defaults:
 ```bash
-STT_PROVIDER=local
 WHISPER_MODEL=small
 WHISPER_DEVICE=cpu
 WHISPER_COMPUTE_TYPE=int8
@@ -63,6 +64,7 @@ If you wish to use the text-based planner without the web UI:
 make build-image
 make bash
 ```
+Build with `ENABLE_VERIFICATION=true` if you want to enable formal verification.
 
 From within the container you can run the text-based planner:
 ```bash
@@ -72,10 +74,11 @@ or selecting your own config:
 ```bash
 CONFIG=<path_to_config>.yaml make run
 ```
+The available configs and their options are documented in [app/config/README.md](app/config/README.md).
 
 Or you can even just run the webapp manually:
 ```bash
-make serve
+make webapp
 ```
 
 ## TCP Message Format
@@ -121,17 +124,6 @@ python3 scripts/mock_robot.py --robot-id amiga-01 --bt-port 12346 --planner http
 With no robots registered, the planner falls back to the single `network.tcp` host/port and behaves
 exactly as it did before.
 
-## Test
-```bash
-python -m pytest test/ -v
-...
-test/test_network_interface.py::test_send_xml_only PASSED [25%]
-test/test_network_interface.py::test_send_xml_and_tree_points PASSED [50%]
-test/test_network_interface.py::test_length_prefix_correctness PASSED [75%]
-test/test_network_interface.py::test_empty_tree_points_list PASSED [100%]
-...
-```
-
 ## Example Queries
 The following queries are used to demonstrate the capabilities of this system:
 
@@ -145,11 +137,24 @@ The following queries are used to demonstrate the capabilities of this system:
 If you use this work, please cite:
 
 ```latex
-@inproceedings{zuzuarregui_carpin_2025,
-	author    = {M. A. Zuzu\'{a}rregui and S. Carpin},
-	title     = {Leveraging LLMs for Mission Planning in Precision Agriculture},
-	booktitle = {Proceedings of the IEEE International Conference on Robotics and Automation},
-	pages     = {7146--7152},
-	year      = {2025}
-}
+@INPROCEEDINGS{zuzuarreguiICRA2025,
+  author={Zuzuárregui, Marcos Abel and Carpin, Stefano},
+  booktitle={2025 IEEE International Conference on Robotics and Automation (ICRA)},
+  title={Leveraging LLMs for Mission Planning in Precision Agriculture},
+  year={2025},
+  pages={7146-7152},
+  keywords={Precision agriculture;Large language models;Natural languages;Data collection;Routing;Chatbots;Libraries;Cognition;Planning;Standards},
+  doi={10.1109/ICRA55743.2025.11128633}}
+
+```
+For the formal verification extension, please cite:
+```latex
+@INPROCEEDINGS{zuzuarreguiICRA2026,
+  author={Zuzuárregui, Marcos Abel and Carpin, Stefano},
+  booktitle={2026 IEEE International Conference on Robotics and Automation (ICRA)},
+  title={As You Wish: Mission Planning with Formal Verification using LLMs in Precision Agriculture},
+  year={2026},
+  pages={1282-1289},
+  keywords={Planning;Large language models;Modeling;Robots;XML;Trees (botanical);Vegetation;Printing;Spinning;Radio access networks},
+  doi={10.1109/ICRA57385.2026.11697380}}
 ```

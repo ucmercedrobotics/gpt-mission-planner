@@ -1,0 +1,12 @@
+<root BTCPP_format="4" schema_location="schemas/amiga_btcpp.xsd">
+  <Mission>Can you please visit Tree 1 and Tree 4, but don't approach them?</Mission>
+  <BehaviorTree ID="VisitTree1AndTree4">
+    <Sequence>
+      <MoveToAisleHead name="EnterColumn1" action_name="move_to_aisle_head" id="1" />
+      <MoveToTreeID name="VisitTree1" action_name="follow_tree_id_waypoint" id="1" approach_tree="false" />
+      <MoveToAisleHead name="ExitColumn1" action_name="move_to_aisle_head" id="1" />
+      <MoveToAisleHead name="EnterColumn4" action_name="move_to_aisle_head" id="4" />
+      <MoveToTreeID name="VisitTree4" action_name="follow_tree_id_waypoint" id="4" approach_tree="false" />
+    </Sequence>
+  </BehaviorTree>
+</root>

@@ -20,7 +20,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from openai import OpenAI
 
 from mission_planner import MissionPlanner, MissionPlannerConfig, ModelRoutingConfig
 from network_interface import NetworkInterface
@@ -159,7 +158,6 @@ class GenerateRequest(BaseModel):
     text: str | None
 
 
-_openai_client = None
 _whisper_model = None
 
 CONTENT_TYPE_EXTENSION_MAP: dict[str, str] = {
@@ -379,23 +377,7 @@ def _extract_tree_points_from_bin(
 
 
 def transcribe(path: str) -> str:
-    provider = os.getenv("STT_PROVIDER", "openai").lower()
-    if provider == "local":
-        return transcribe_local(path)
-    return transcribe_openai(path)
-
-
-def transcribe_openai(path: str) -> str:
-    global _openai_client
-    if _openai_client is None:
-        _openai_client = OpenAI()
-    with open(path, "rb") as audio_file:
-        transcript = _openai_client.audio.transcriptions.create(
-            model=os.getenv("STT_MODEL", "gpt-4o-mini-transcribe"),
-            file=audio_file,
-            prompt="The user is a farmer speaking instructions for an ag-tech robot.",
-        )
-        return transcript.text
+    return transcribe_local(path)
 
 
 def transcribe_local(path: str) -> str:
@@ -869,6 +851,12 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
         ltl: bool = bool(validation_cfg.get("ltl_enabled", False))
         pml_template_path: str = str(verification_cfg.get("promela_template", ""))
         spin_path: str = str(verification_cfg.get("spin_path", ""))
+        example_runs: int = int(verification_cfg.get("example_runs", 5))
+        if verification_cfg.get("human_review", False):
+            # review prompts on stdin, which would block the web request
+            logger.warning(
+                "planner.formal_verification.human_review is CLI-only. Using the LLM arbiter."
+            )
 
         try:
             if "contextFiles" in data:
@@ -963,40 +951,6 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
                     "No spin configuration found. Proceeding without formal verification..."
                 )
 
-            routing_mode = str(routing_cfg.get("mode", "online")).lower()
-            online_model = str(routing_cfg["online_model"])
-            offline_model = routing_cfg.get("offline_model")
-            online_api_base = endpoints_cfg.get("online_api_base")
-            offline_api_base = endpoints_cfg.get("offline_api_base")
-
-            if routing_mode == "auto":
-                selected_model = online_model
-                selected_api_base = online_api_base
-                auto_toggle = True
-                local_model = offline_model
-                local_api_base = offline_api_base
-            elif routing_mode == "online":
-                selected_model = online_model
-                selected_api_base = online_api_base
-                auto_toggle = False
-                local_model = None
-                local_api_base = None
-            elif routing_mode == "offline":
-                if offline_model is None:
-                    logger.warning(
-                        "llm.routing.mode=offline but no offline_model provided. Falling back to online_model."
-                    )
-                selected_model = offline_model or online_model
-                selected_api_base = offline_api_base
-                auto_toggle = False
-                local_model = None
-                local_api_base = None
-            else:
-                raise ValueError(
-                    "Invalid llm.routing.mode '%s'. Supported values: auto, online, offline"
-                    % routing_mode
-                )
-
             # Fleet mode plans against every eligible robot's schema at once,
             # deduplicated so two robots on the same platform contribute one
             # copy of the XSD to the prompt.
@@ -1024,17 +978,14 @@ async def generate(request: str = Form(...), file: UploadFile = File(None)):
                 lint_xml=lint_xml,
                 max_retries=int(planner_cfg["retries"]["max"]),
                 max_tokens=int(generation_cfg["max_tokens"]),
-                temperature=float(generation_cfg["temperature"]),
+                reasoning_effort=str(generation_cfg.get("reasoning_effort", "high")),
                 ltl=ltl,
                 promela_template_path=pml_template_path,
                 spin_path=spin_path,
+                example_runs=example_runs,
                 log_directory=mission_cfg["log_directory"],
-                model_routing=ModelRoutingConfig(
-                    model=selected_model,
-                    api_base=selected_api_base,
-                    auto_model_toggle=auto_toggle,
-                    local_model=local_model,
-                    local_api_base=local_api_base,
+                model_routing=ModelRoutingConfig.from_config(
+                    routing_cfg, endpoints_cfg, logger
                 ),
             )
 

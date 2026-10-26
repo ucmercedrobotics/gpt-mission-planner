@@ -2,12 +2,13 @@ import json
 import logging
 import os
 import socket
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Tuple, Any
 
 from gpt_interface import LLMInterface
 from utils.os_utils import (
     execute_shell_cmd,
+    read_file,
     write_out_file,
     write_out_binary_file,
 )
@@ -19,15 +20,6 @@ from utils.xml_utils import (
 from orchards.tree_placement_generator import TreePlacementGenerator
 from fleet.schema_index import schema_path
 
-OPENAI: str = "openai/gpt-5.2"
-ANTHROPIC: str = "claude-sonnet-4-20250514"
-GEMINI: str = "gemini/gemini-2.5-pro"
-GPTOSS: str = "openai/openai/gpt-oss-20b"
-HUMAN_REVIEW: bool = False
-EXAMPLE_RUNS: int = 5
-# select model
-MODEL: str = GPTOSS
-ARBITER: str = ANTHROPIC
 INTERNET_CHECK_HOST: str = "1.1.1.1"
 INTERNET_CHECK_PORT: int = 53
 INTERNET_CHECK_TIMEOUT: float = 1.5
@@ -35,13 +27,73 @@ INTERNET_CHECK_TIMEOUT: float = 1.5
 
 @dataclass
 class ModelRoutingConfig:
-    model: str = MODEL
+    model: str
     api_base: str | None = None
     auto_model_toggle: bool = False
     cloud_model: str | None = None
     cloud_api_base: str | None = None
     local_model: str | None = None
     local_api_base: str | None = None
+    # optional LTL generation and arbiter overrides; fall back to model/local_model
+    ltl_model: str | None = None
+    ltl_local_model: str | None = None
+    arbiter_model: str | None = None
+    arbiter_local_model: str | None = None
+
+    @classmethod
+    def from_config(
+        cls,
+        routing_cfg: dict[str, Any],
+        endpoints_cfg: dict[str, Any],
+        logger: logging.Logger,
+    ) -> "ModelRoutingConfig":
+        routing_mode = str(routing_cfg.get("mode", "online")).lower()
+        online_model = str(routing_cfg["online_model"])
+        offline_model = routing_cfg.get("offline_model")
+        online_api_base = endpoints_cfg.get("online_api_base")
+        offline_api_base = endpoints_cfg.get("offline_api_base")
+        ltl_cfg: dict[str, Any] = routing_cfg.get("ltl") or {}
+        ltl_online_model = ltl_cfg.get("online_model")
+        ltl_offline_model = ltl_cfg.get("offline_model")
+        arbiter_cfg: dict[str, Any] = routing_cfg.get("arbiter") or {}
+        arbiter_online_model = arbiter_cfg.get("online_model")
+        arbiter_offline_model = arbiter_cfg.get("offline_model")
+
+        if routing_mode == "auto":
+            return cls(
+                model=online_model,
+                api_base=online_api_base,
+                auto_model_toggle=True,
+                local_model=offline_model,
+                local_api_base=offline_api_base,
+                ltl_model=ltl_online_model,
+                ltl_local_model=ltl_offline_model,
+                arbiter_model=arbiter_online_model,
+                arbiter_local_model=arbiter_offline_model,
+            )
+        elif routing_mode == "online":
+            return cls(
+                model=online_model,
+                api_base=online_api_base,
+                ltl_model=ltl_online_model,
+                arbiter_model=arbiter_online_model,
+            )
+        elif routing_mode == "offline":
+            if offline_model is None:
+                logger.warning(
+                    "llm.routing.mode=offline but no offline_model provided. Falling back to online_model."
+                )
+            return cls(
+                model=offline_model or online_model,
+                api_base=offline_api_base,
+                ltl_model=ltl_offline_model,
+                arbiter_model=arbiter_offline_model,
+            )
+        else:
+            raise ValueError(
+                "Invalid llm.routing.mode '%s'. Supported values: auto, online, offline"
+                % routing_mode
+            )
 
 
 @dataclass
@@ -51,12 +103,16 @@ class MissionPlannerConfig:
     lint_xml: bool
     max_retries: int
     max_tokens: int
-    temperature: float
+    reasoning_effort: str
     ltl: bool
     promela_template_path: str
     spin_path: str
     log_directory: str
-    model_routing: ModelRoutingConfig = field(default_factory=ModelRoutingConfig)
+    model_routing: ModelRoutingConfig
+    # human y/n approval of example runs instead of the LLM arbiter (CLI only)
+    human_review: bool = False
+    # number of accepting runs sampled from the automaton for review
+    example_runs: int = 5
 
 
 class MissionPlanner:
@@ -103,11 +159,15 @@ class MissionPlanner:
         model_routing = self.config.model_routing
         selected_model: str = model_routing.model
         selected_api_base: str | None = model_routing.api_base
+        selected_ltl_model: str = model_routing.ltl_model or selected_model
+        selected_arbiter_model: str = model_routing.arbiter_model or selected_model
         if model_routing.auto_model_toggle:
             is_online = self._internet_available()
             if is_online:
                 selected_model = model_routing.cloud_model or model_routing.model
                 selected_api_base = model_routing.cloud_api_base
+                selected_ltl_model = model_routing.ltl_model or selected_model
+                selected_arbiter_model = model_routing.arbiter_model or selected_model
                 self.logger.info(
                     "Internet reachable. Using cloud model '%s'", selected_model
                 )
@@ -118,6 +178,10 @@ class MissionPlanner:
                     if model_routing.local_api_base is not None
                     else model_routing.api_base
                 )
+                selected_ltl_model = model_routing.ltl_local_model or selected_model
+                selected_arbiter_model = (
+                    model_routing.arbiter_local_model or selected_model
+                )
                 self.logger.warning(
                     "Internet unavailable. Using local model '%s'", selected_model
                 )
@@ -127,7 +191,7 @@ class MissionPlanner:
             self.config.token_path,
             selected_model,
             self.config.max_tokens,
-            temperature=self.config.temperature,
+            reasoning_effort=self.config.reasoning_effort,
             api_base=selected_api_base,
         )
         self.gpt.init_context(self.schema_paths, self.context_files, self.context_vars)
@@ -137,24 +201,30 @@ class MissionPlanner:
             from promela_compiler import PromelaCompiler
 
             self.aut: Any = None
-            self.human_review: bool = HUMAN_REVIEW
-            # init XML mission gpt interface
+            self.human_review: bool = self.config.human_review
+            self.example_runs: int = self.config.example_runs
+            # init LTL mission gpt interface
+            if selected_ltl_model != selected_model:
+                self.logger.info("Using LTL model '%s'", selected_ltl_model)
             self.pml_gpt: LLMInterface = LLMInterface(
                 self.logger,
                 self.config.token_path,
-                selected_model,
+                selected_ltl_model,
                 self.config.max_tokens,
-                temperature=self.config.temperature,
+                reasoning_effort=self.config.reasoning_effort,
                 api_base=selected_api_base,
             )
-            # Claude human verification substitute
+            # LLM arbiter, substitute for human verification
+            if not self.human_review:
+                self.logger.info("Using arbiter model '%s'", selected_arbiter_model)
             self.verification_checker: LLMInterface = LLMInterface(
                 self.logger,
                 self.config.token_path,
-                ARBITER,
+                selected_arbiter_model,
                 self.config.max_tokens,
-                temperature=self.config.temperature,
+                reasoning_effort=self.config.reasoning_effort,
                 context_template="verification_agent",
+                api_base=selected_api_base,
             )
             # object for compiling Promela from XML
             self.promela: PromelaCompiler = PromelaCompiler(
@@ -271,7 +341,7 @@ class MissionPlanner:
 
             # if we're formally verifying
             if self.ltl:
-                from .utils.spot_utils import rename_ltl_macros
+                from utils.spot_utils import rename_ltl_macros
 
                 # preliminary check, but can be improved to be more thorough
                 if ltl_task_count != xml_task_count:
@@ -579,7 +649,7 @@ class MissionPlanner:
     def _ltl_validation(
         self, promela_string: str, macros: str, ltl_out: str
     ) -> Tuple[bool, str]:
-        from .utils.spot_utils import init_state_macro, add_init_state
+        from utils.spot_utils import init_state_macro, add_init_state
 
         ret: bool = False
 
@@ -611,17 +681,20 @@ class MissionPlanner:
         e: str | None = ""
 
         runs: list[str] = [
-            generate_accepting_run_string(self.aut) for _ in range(EXAMPLE_RUNS)
+            generate_accepting_run_string(self.aut) for _ in range(self.example_runs)
         ]
         runs_str: str = "\n".join(runs)
 
         if self.human_review:
-            resp: str = ""
-            while resp != ("y" or "n"):
-                resp = input(
-                    "Here are 5 example executions of your mission: "
-                    + runs_str
-                    + "\nNote, these are just several possible runs. \n\nType y/n."
+            while True:
+                resp: str = (
+                    input(
+                        f"Here are {self.example_runs} example executions of your mission: "
+                        + runs_str
+                        + "\nNote, these are just several possible runs. \n\nType y/n."
+                    )
+                    .strip()
+                    .lower()
                 )
 
                 if resp == "y":
@@ -633,8 +706,6 @@ class MissionPlanner:
                         "Conflict between mission and validator... Let's try again."
                     )
                     break
-                else:
-                    continue
         else:
             ask = (
                 'Please answer this with one word: "Yes" or "No". \
@@ -644,7 +715,7 @@ class MissionPlanner:
                 Mission request: \n'
                 + mission_query
                 + "\nContext:\n"
-                + "".join([open(f).read() for f in self.context_files])
+                + "".join([read_file(f, self.context_vars) for f in self.context_files])
                 + "\nAtomic Proposition definitions:\n"
                 + macros
                 + "\nExample runs:\n"

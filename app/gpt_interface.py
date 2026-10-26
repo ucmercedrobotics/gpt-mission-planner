@@ -9,9 +9,6 @@ from litellm import completion
 from context import load_template
 from utils.os_utils import read_file
 
-OPENAI_TEMP: float = 1.0
-REASONING: str = "high"
-
 litellm.drop_params = True
 
 
@@ -22,7 +19,7 @@ class LLMInterface:
         token_path: str,
         model: str = "openai:gpt-4o",
         max_tokens: int = 2000,
-        temperature: float = 0.2,
+        reasoning_effort: str | None = "high",
         context_template: str = "tfr_2026",
         api_base: str | None = None,
     ):
@@ -39,15 +36,21 @@ class LLMInterface:
         # input template file provided when wanting spin verification
         self.promela_template: str = ""
         self.context_template: str = context_template
-        self.temperature: float = temperature
         self.api_base: str | None = api_base
-        self.reasoning: str | None = None
-        if "openai" in self.model:
-            self.logger.warning(
-                f"Using OpenAI model: {self.model}, which requires temperature {OPENAI_TEMP}"
+        # temperature is never sent: reasoning models reject or ignore it
+        self.reasoning: str | None = reasoning_effort
+        self.reasoning_params: dict = {"reasoning_effort": reasoning_effort}
+        if "anthropic" in self.model or "claude" in self.model:
+            # litellm maps reasoning_effort to thinking.type.enabled, which newer
+            # Claude models reject; send adaptive thinking + output_config.effort
+            self.reasoning_params = (
+                {
+                    "thinking": {"type": "adaptive"},
+                    "output_config": {"effort": reasoning_effort},
+                }
+                if reasoning_effort and reasoning_effort != "none"
+                else {}
             )
-            self.temperature = OPENAI_TEMP
-            self.reasoning = REASONING
 
     def init_context(
         self,
@@ -118,8 +121,7 @@ class LLMInterface:
             payload = {
                 "model": self.model,
                 "messages": message,
-                "temperature": self.temperature,
-                "reasoning_effort": self.reasoning,
+                **self.reasoning_params,
                 "max_tokens": self.max_tokens,
             }
             self.logger.debug(
@@ -132,8 +134,7 @@ class LLMInterface:
                 cmp = completion(
                     model=self.model,
                     messages=message,
-                    temperature=self.temperature,
-                    reasoning_effort=self.reasoning,
+                    **self.reasoning_params,
                     max_tokens=self.max_tokens,
                     api_base=self.api_base,
                 )

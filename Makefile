@@ -14,7 +14,6 @@ ENABLE_VERIFICATION ?= false
 BUILD_SPOT ?= true
 ifneq (,$(filter $(ARCH),arm64 aarch64))
 	PLATFORM := linux/arm64
-	ENABLE_VERIFICATION := false
 endif
 
 repo-init:
@@ -22,11 +21,11 @@ repo-init:
 	pre-commit install && \
 	git submodule update --init --recursive
 
-# TODO: enable spin compilation via source to run on ARM
 push:
 	docker buildx build --push \
 	--platform linux/arm64,linux/amd64 \
-	--build-arg ENABLE_VERIFICATION=false \
+	--build-arg ENABLE_VERIFICATION=true \
+	--build-arg BUILD_SPOT=$(BUILD_SPOT) \
 	. -t ${IMAGE} --target ${TARGET}
 
 build-image:

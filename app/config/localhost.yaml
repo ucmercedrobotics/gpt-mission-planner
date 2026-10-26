@@ -12,7 +12,7 @@ planner:
     temperature: 0.2
   validation:
     lint_xml: true
-    ltl_enabled: false
+    ltl_enabled: true
   formal_verification:
     promela_template: "app/resources/context/formal_verification/promela_template.txt"
     spin_path: "spin"

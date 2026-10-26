@@ -3,7 +3,6 @@ ARG ENABLE_VERIFICATION=false
 ARG BUILD_SPOT=false
 ARG SPOT_VERSION=2.13.1
 ARG SPIN_VERSION=6.5.2
-ARG SPIN_FILE=spin651_linux64
 
 FROM ${PYTHON_IMAGE} AS builder
 
@@ -17,16 +16,17 @@ ARG ENABLE_VERIFICATION
 ARG BUILD_SPOT
 ARG SPOT_VERSION
 ARG SPIN_VERSION
-ARG SPIN_FILE
 
 ENV MAKEFLAGS=-j4
 
 RUN apt update && apt install -y byacc flex graphviz
 
 RUN set -e; if test "$ENABLE_VERIFICATION" = true; then \
+  echo "Building SPIN from source..."; \
   curl -Lo- https://github.com/nimble-code/Spin/archive/refs/tags/version-${SPIN_VERSION}.tar.gz | \
-  tar -xOzf- Spin-version-${SPIN_VERSION}/Bin/${SPIN_FILE}.gz | gunzip >/usr/local/bin/spin; \
-  chmod 0755 /usr/local/bin/spin; spin -V; \
+  tar -xzf-; make -C Spin-version-${SPIN_VERSION}/Src; \
+  install -m 0755 Spin-version-${SPIN_VERSION}/Src/spin /usr/local/bin/spin; \
+  rm -rf Spin-version-${SPIN_VERSION}; spin -V; \
   if test "$BUILD_SPOT" = true; then \
     echo "Building SPOT from source..."; \
     curl -Lo- https://www.lrde.epita.fr/dload/spot/spot-${SPOT_VERSION}.tar.gz | \

@@ -9,18 +9,26 @@ planner:
     max: 10
   generation:
     max_tokens: 4096
-    temperature: 0.2
+    reasoning_effort: high
   validation:
     lint_xml: true
     ltl_enabled: true
   formal_verification:
     promela_template: "app/resources/context/formal_verification/promela_template.txt"
     spin_path: "spin"
+    human_review: false
+    example_runs: 5
 
 llm:
   routing:
     mode: online
     online_model: "openai/gpt-5.2"
+    ltl:
+      online_model: null
+      offline_model: null
+    arbiter:
+      online_model: "claude-sonnet-4-20250514"
+      offline_model: null
   endpoints:
     online_api_base: null
     offline_api_base: null
@@ -40,7 +48,6 @@ network:
     port: 12346
 
 fleet:
-  # Flip to true to let robots self-register instead of using network.tcp above.
   enabled: false
   discovery:
     host: "0.0.0.0"

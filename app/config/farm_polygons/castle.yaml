@@ -1,5 +1,3 @@
-# NOTE: you must draw a square from the top left to top right to bottom right to bottom left.
-#       otherwise, the webapp won't render the points correctly.
 points:
   - lon: -120.578217
     lat: 37.373989

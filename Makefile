@@ -24,7 +24,7 @@ repo-init:
 push:
 	docker buildx build --push \
 	--platform linux/arm64,linux/amd64 \
-	--build-arg ENABLE_VERIFICATION=$(ENABLE_VERIFICATION) \
+	--build-arg ENABLE_VERIFICATION=true \
 	--build-arg BUILD_SPOT=$(BUILD_SPOT) \
 	. -t ${IMAGE} --target ${TARGET}
 

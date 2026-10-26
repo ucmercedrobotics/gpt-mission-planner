@@ -27,7 +27,7 @@ class Config:
     ltl: bool
     max_retries: int
     max_tokens: int
-    temperature: int
+    reasoning_effort: str
     log_directory: str
     schema: list[str]
     context_files: list[str]

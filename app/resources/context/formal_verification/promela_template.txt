@@ -1,4 +1,4 @@
-mtype = { TakeThermalPicture, TakeAmbientTemperature, TakeCO2Reading, MoveToRelativeLocation, MoveToGPSLocation, OrientRobotHeading, DetectObject, ActivateSeeder, DeactivateSeeder, SelectSeed }; // available action pool for robot
+mtype = { SampleLeaf, TakeThermalPicture, TakeAmbientTemperature, TakeCO2Reading, MoveToRelativeLocation, MoveToTreeID, MoveToGPSLocation, MoveToAisleHead, OrientRobotHeading, DetectObject, ActivateSeeder, DeactivateSeeder, SelectSeed }; // available action pool for robot
 
 typedef Action {
     mtype actionType; // type of action

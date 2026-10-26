@@ -9,20 +9,27 @@ planner:
     max: 10
   generation:
     max_tokens: 10000
-    temperature: 0.2
+    reasoning_effort: medium
   validation:
     lint_xml: true
     ltl_enabled: true
   formal_verification:
     promela_template: "app/resources/context/formal_verification/promela_template.txt"
     spin_path: "spin"
+    human_review: false
+    example_runs: 5
 
 llm:
   routing:
-    # supported modes: auto, online, offline
     mode: online
-    online_model: "openai/gpt-5.6-sol"
+    online_model: "openai/gpt-5.6-terra"
     offline_model: "hosted_vllm/openai/gpt-oss-120b"
+    ltl:
+      online_model: "anthropic/claude-opus-5-5"
+      offline_model: null
+    arbiter:
+      online_model: "anthropic/claude-opus-5-5"
+      offline_model: null
   endpoints:
     online_api_base: null
     offline_api_base: "http://172.17.0.1:8000/v1"
@@ -35,11 +42,9 @@ mission:
     - "./app/resources/context/prompts/mission_planner/wheeled/orchard.j2"
     - "./app/resources/context/prompts/mission_planner/manipulators/kinova.txt"
   farm:
-    polygon_file: "farm_polygons/gazebo.yaml"
+    polygon_file: "farm_polygons/reza_medium.yaml"
 
 network:
-  # Legacy single-robot target. Used when fleet.enabled is false, or when the
-  # fleet is enabled but no robot has reported in.
   tcp:
     host: 172.17.0.1
     port: 12346
@@ -47,17 +52,12 @@ network:
 fleet:
   enabled: true
   discovery:
-    # Robots POST to http://<planner>:<port>/robots/register and then heartbeat.
     host: "0.0.0.0"
     port: 8003
-    # No heartbeat within stale_after_s -> skipped for new work.
-    # No heartbeat within heartbeat_ttl_s -> treated as offline.
     heartbeat_ttl_s: 15
     stale_after_s: 8
-  # Set to require an X-Fleet-Token header on every discovery call.
   auth_token: null
   registry_file: "logs/robots.json"
-  # Bench robots that cannot self-register. Always treated as online.
   static_robots: []
   allocation:
     require_idle: true

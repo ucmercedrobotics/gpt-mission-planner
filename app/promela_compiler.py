@@ -109,6 +109,12 @@ class PromelaCompiler:
                 execution_calls.append(indent + ":: ")
                 self._define_tree(t, task_defs, execution_calls, indent + "    ", True)
                 execution_calls.append(indent + "fi\n")
+            elif t.tag in (
+                ControlTags.RetryUntilSuccessful,
+                ControlTags.ReactiveSequence,
+            ):
+                # modeled as a single successful pass through children
+                self._define_tree(t, task_defs, execution_calls, indent)
             elif t.tag == ControlTags.Parallel:
                 pass  # TODO
             elif t.tag in ActionTags.__dict__.values():

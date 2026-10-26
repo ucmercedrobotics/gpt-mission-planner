@@ -21,7 +21,7 @@ ANTHROPIC_API_KEY=<my_token_here>
 ```
 By default, XML planning uses OpenAI and is the only key required.
 If using formal verification, add an Anthropic key: the default config uses Anthropic models for LTL generation and the arbiter.
-Models can also run offline against a local OpenAI-compatible server (e.g. vLLM) via `llm.routing.mode` (`online`, `offline`, or `auto`).
+Models can also run offline against a local LiteLLM-compatible server (e.g. vLLM) via `llm.routing.mode` (`online`, `offline`, or `auto`).
 See [app/config/README.md](app/config/README.md) for every config option.
 
 You may also configure the speech-to-text models if you wish.

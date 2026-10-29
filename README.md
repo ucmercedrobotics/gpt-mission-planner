@@ -1,4 +1,5 @@
 # GPT-Powered Robot Mission Planner
+[![CI](https://github.com/ucmercedrobotics/gpt-mission-planner/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ucmercedrobotics/gpt-mission-planner/actions/workflows/ci.yml)
 [![github](https://img.shields.io/badge/GitHub-ucmercedrobotics-181717.svg?style=flat&logo=github)](https://github.com/ucmercedrobotics)
 [![website](https://img.shields.io/badge/Website-UCMRobotics-5087B2.svg?style=flat&logo=telegram)](https://robotics.ucmerced.edu/)
 [![python](https://img.shields.io/badge/Python-3.11-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)

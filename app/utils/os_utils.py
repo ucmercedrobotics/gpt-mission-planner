@@ -37,6 +37,20 @@ def missing_verification_tools(spin_path: str) -> list[str]:
     return missing
 
 
+def require_verification_tools(spin_path: str) -> None:
+    """Fail when verification is on but cannot run.
+
+    An operator who turns on verification must not get an unverified plan.
+    """
+    missing = missing_verification_tools(spin_path)
+    if missing:
+        raise RuntimeError(
+            f"planner.validation.ltl_enabled is true but {' and '.join(missing)} "
+            f"{'is' if len(missing) == 1 else 'are'} not installed. Build the image "
+            "with ENABLE_VERIFICATION=true, or set ltl_enabled: false."
+        )
+
+
 def write_out_file(dir: str, mp_out: str | None) -> str:
     assert isinstance(mp_out, str)
 

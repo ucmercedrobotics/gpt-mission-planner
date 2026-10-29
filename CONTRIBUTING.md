@@ -4,12 +4,12 @@ Thank you for your interest in the planner. This file tells you how to get help,
 
 ## Get help
 
-- Open a [GitHub issue](https://github.com/ucmercedrobotics/gpt-mission-planner/issues) and start the title with `Question:`.
+- Open a [GitHub issue](https://github.com/ucmercedrobotics/gpt-mission-planner/issues/new/choose) with the **Question** template.
 - For questions that you cannot ask in public, send an email to the maintainer: Marcos Abel Zuzuárregui, <mzuzuarregui@ucmerced.edu>.
 
 ## Report a bug
 
-Open a [GitHub issue](https://github.com/ucmercedrobotics/gpt-mission-planner/issues). Give this information:
+Open a [GitHub issue](https://github.com/ucmercedrobotics/gpt-mission-planner/issues/new/choose) with the **Bug report** template. Give this information:
 
 1. The planner version: the release tag (for example, `v1.0.0`) or the commit hash.
 2. How you ran the planner: the web interface (`make prod`) or the command-line interface (`make run`), and your host (operating system and architecture).
@@ -22,7 +22,7 @@ Open a [GitHub issue](https://github.com/ucmercedrobotics/gpt-mission-planner/is
 
 ## Request a feature or a new robot
 
-- For a new feature, open an issue that describes the use case first. Then we can agree on the approach before you write code.
+- For a new feature, open an issue with the **Feature request** template, and describe the use case first. Then we can agree on the approach before you write code.
 - The action-primitive schemas (XSD) for each robot are in a separate repository, [gpt-mission-planner-schemas](https://github.com/ucmercedrobotics/gpt-mission-planner-schemas), which this repository includes as the `schemas/` submodule. Send a new or changed robot schema to that repository.
 
 ## Set up a development environment

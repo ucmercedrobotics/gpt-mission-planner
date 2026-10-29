@@ -91,8 +91,10 @@ make build-image                            # without formal verification
 make build-image ENABLE_VERIFICATION=true   # with SPIN and Spot (Spot is compiled from source, which is slow)
 ```
 
-An image built without verification has no SPIN or Spot. If the configuration turns verification
-on, the planner logs a warning and plans without it.
+An image built without verification has no SPIN or Spot. The default configuration turns
+verification on, so with such an image the planner stops at startup with an error. Set
+`planner.validation.ltl_enabled: false` in [app/config/localhost.yaml](app/config/localhost.yaml)
+to run it without verification.
 
 ## Quick start
 

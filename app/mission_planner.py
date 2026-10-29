@@ -8,14 +8,13 @@ from typing import Tuple, Any
 from gpt_interface import LLMInterface
 from utils.os_utils import (
     execute_shell_cmd,
-    missing_verification_tools,
     read_file,
+    require_verification_tools,
     write_out_file,
     write_out_binary_file,
 )
 from utils.xml_utils import (
     parse_code,
-    set_mission_text,
     validate_any,
     count_xml_tasks,
 )
@@ -200,15 +199,7 @@ class MissionPlanner:
         # init Promela compiler
         self.ltl: bool = self.config.ltl
         if self.ltl:
-            missing = missing_verification_tools(self.config.spin_path)
-            if missing:
-                self.logger.warning(
-                    "Formal verification is enabled but %s not installed "
-                    "(build with ENABLE_VERIFICATION=true). Proceeding without it...",
-                    " and ".join(missing),
-                )
-                self.ltl = False
-        if self.ltl:
+            require_verification_tools(self.config.spin_path)
             from promela_compiler import PromelaCompiler
 
             self.aut: Any = None
@@ -333,7 +324,6 @@ class MissionPlanner:
                     self.logger.debug(f"XML generation failed: {xml_out}")
                     xml_input = xml_out
                     continue
-                xml_out = set_mission_text(xml_out, prompt)
                 # store file for logs
                 file_xml_out = write_out_file(self.log_directory, xml_out)
                 self.logger.debug(f"Wrote out temp XML file: {file_xml_out}")
@@ -527,7 +517,7 @@ class MissionPlanner:
                 continue
 
             if ok:
-                return True, set_mission_text(xml_out, assignment.sub_mission)
+                return True, xml_out
 
             # _generate_xml puts the validation error in xml_out on failure.
             last_error = xml_out

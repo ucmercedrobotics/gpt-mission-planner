@@ -1,7 +1,5 @@
 import os
-import re
 from typing import Optional, Tuple
-from xml.sax.saxutils import escape
 
 from lxml import etree
 
@@ -28,22 +26,6 @@ def _load_schema(schema_path: str) -> etree.XMLSchema:
         schema = etree.XMLSchema(schema_root)
         _SCHEMA_CACHE[key] = schema
     return schema
-
-
-def set_mission_text(xml_mp: str, mission: str) -> str:
-    """Put the operator's request in the Mission element.
-
-    The model is told to copy the request there, but on a retry the message it
-    sees is the validation feedback, and in fleet mode it is the per-robot
-    prompt, so it copies those instead.
-    """
-    return re.sub(
-        r"<Mission(\s[^>]*)?>.*?</Mission>",
-        lambda m: f"<Mission{m.group(1) or ''}>{escape(mission)}</Mission>",
-        xml_mp,
-        count=1,
-        flags=re.DOTALL,
-    )
 
 
 def parse_code(mp_out: str | None, code_type: str = "xml") -> str:

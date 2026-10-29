@@ -1,0 +1,26 @@
+name: Question
+description: Ask how to install, configure or use the planner.
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please search [existing issues](https://github.com/ucmercedrobotics/gpt-mission-planner/issues) first.
+        **Do not paste API keys or the contents of your `.env` file.**
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What do you want to know?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What are you trying to do? Give the robot, the configuration file and the version (release tag or commit) if they apply.
+    validations:
+      required: false

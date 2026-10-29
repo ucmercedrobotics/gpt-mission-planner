@@ -76,12 +76,12 @@ Then get the image in one of two ways.
 
 **Published image (recommended).** The image is published as
 `ghcr.io/ucmercedrobotics/gpt-mission-planner` for amd64 and arm64, and it is built with formal
-verification. This README describes release `v1.0.0`. The `make` targets use the `latest` tag, so
+verification. This README describes release `v1.0.1`. The `make` targets use the `latest` tag, so
 pull the release and tag it:
 
 ```bash
-docker pull ghcr.io/ucmercedrobotics/gpt-mission-planner:v1.0.0
-docker tag ghcr.io/ucmercedrobotics/gpt-mission-planner:v1.0.0 ghcr.io/ucmercedrobotics/gpt-mission-planner:latest
+docker pull ghcr.io/ucmercedrobotics/gpt-mission-planner:v1.0.1
+docker tag ghcr.io/ucmercedrobotics/gpt-mission-planner:v1.0.1 ghcr.io/ucmercedrobotics/gpt-mission-planner:latest
 ```
 
 **Local build.**
@@ -279,7 +279,10 @@ development environment and send a pull request. Report problems and ask questio
 This project is licensed under the Apache License 2.0. See [LICENSE](LICENSE).
 
 ## Citation
-If you use this work, please cite:
+
+If you use this software, please cite:
+
+<!-- [JOSS paper BibTeX; after acceptance.] -->
 
 ```latex
 @INPROCEEDINGS{zuzuarreguiICRA2025,
@@ -289,9 +292,10 @@ If you use this work, please cite:
   year={2025},
   pages={7146-7152},
   keywords={Precision agriculture;Large language models;Natural languages;Data collection;Routing;Chatbots;Libraries;Cognition;Planning;Standards},
-  doi={10.1109/ICRA55743.2025.11128633}}
-
+  doi={10.1109/ICRA55743.2025.11128633}
+  }
 ```
+
 For the formal verification extension, please cite:
 ```latex
 @INPROCEEDINGS{zuzuarreguiICRA2026,
@@ -301,16 +305,24 @@ For the formal verification extension, please cite:
   year={2026},
   pages={1282-1289},
   keywords={Planning;Large language models;Modeling;Robots;XML;Trees (botanical);Vegetation;Printing;Spinning;Radio access networks},
-  doi={10.1109/ICRA57385.2026.11697380}}
+  doi={10.1109/ICRA57385.2026.11697380}
+  }
 ```
-For the end-to-end software architecture with behavior trees, please cite:
-```latex
-@ARTICLE{zuzuarreguiTFR2026,
-  author={Zuzuárregui, Marcos A. and Abedi, Ali and Ehsani, Reza and Carpin, Stefano},
-  journal={IEEE Transactions on Field Robotics},
-  title={An End-to-End Software Architecture Integrating Natural Language Mission Planning and Behavior Trees for Precision Agriculture},
-  year={2026},
-  volume={3},
-  pages={899-918},
-  doi={10.1109/TFR.2026.3736546}}
-```
+
+## Publications that use the planner
+
+- M. A. Zuzuárregui and S. Carpin, "Leveraging LLMs for Mission Planning in Precision
+  Agriculture," in *Proceedings of the IEEE International Conference on Robotics and
+  Automation (ICRA)*, 2025, pp. 7146–7152. doi:10.1109/ICRA55743.2025.11128633.
+  Release: `icra-2025`.
+- M. A. Zuzuárregui et al., "One for All: LLM-Based Heterogeneous Mission Planning in
+  Precision Agriculture," in *Proceedings of the IFAC Conference on Sensing, Control and
+  Automation Technologies for Agriculture*, 2025. Release: `ifac-2025`.
+- M. A. Zuzuárregui and S. Carpin, "As You Wish: Mission Planning with Formal Verification
+  Using LLMs in Precision Agriculture," in *Proceedings of the IEEE International
+  Conference on Robotics and Automation (ICRA)*, 2026, pp. 1282–1289.
+  doi:10.1109/ICRA57385.2026.11697380. Release: `icra-2026`.
+- M. A. Zuzuárregui, A. Abedi, R. Ehsani, and S. Carpin, "An End-to-End Software
+  Architecture Integrating Natural Language Mission Planning and Behavior Trees for
+  Precision Agriculture," *IEEE Transactions on Field Robotics*, vol. 3, pp. 899–918,
+  2026. doi:10.1109/TFR.2026.3736546. Release: `tfr-2026`.

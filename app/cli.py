@@ -13,6 +13,7 @@ from fleet.config import build_registry, eligible_robots, load_fleet_config
 from fleet.dispatcher import FleetDispatcher
 from fleet.schema_index import schema_path
 from fleet.service import start_fleet_service
+from utils.os_utils import require_verification_tools
 
 
 @click.command()
@@ -55,6 +56,12 @@ def main(config: str):
     spin_path: str = str(verification_cfg.get("spin_path", ""))
     human_review: bool = bool(verification_cfg.get("human_review", False))
     example_runs: int = int(verification_cfg.get("example_runs", 5))
+
+    if ltl:
+        try:
+            require_verification_tools(spin_path)
+        except RuntimeError as exc:
+            raise click.ClickException(str(exc))
 
     try:
         # configure logger

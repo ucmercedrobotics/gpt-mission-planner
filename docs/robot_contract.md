@@ -159,6 +159,21 @@ ROBOT   -> PLANNER [uint32 BE len][ JSON ack                            ]
 
 Lengths are 4-byte big-endian unsigned ints. XML is raw bytes; JSON is UTF-8.
 
+### Frame reference
+
+| Order | Field | Type/Size | Description |
+| --- | --- | --- | --- |
+| 1 | `xml_length` | 4 bytes (uint32, big-endian) | Length of the XML payload in bytes |
+| 2 | `xml_payload` | `xml_length` bytes | Raw XML file bytes |
+| 3 (optional) | `json_length` | 4 bytes (uint32, big-endian) | Length of the JSON payload in bytes (tree points) |
+| 4 (optional) | `json_payload` | `json_length` bytes | UTF-8 JSON compact tree payload with aisle-indexed entrances |
+| 5 (optional) | `ack_length` + `ack_payload` | 4 bytes + N | **Robot → planner.** UTF-8 JSON acknowledgement |
+
+- If no tree points are sent, only fields 1–2 are transmitted.
+- Compact payloads use minimal tree fields (`tree_index,row,col,lat,lon`) and publish aisle
+  entrances separately via `aisle_entrances` + `aisle_to_entrance_indices`. (These were called
+  `row_entrances` / `row_to_entrance_indices` before aisle-based traversal landed.)
+
 ### Knowing when the payload ends
 
 After its last frame the planner calls `shutdown(SHUT_WR)`. Your reads hit EOF exactly as they did

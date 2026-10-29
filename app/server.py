@@ -28,6 +28,7 @@ from fleet.config import build_registry, eligible_robots, load_fleet_config
 from fleet.dispatcher import FleetDispatcher
 from fleet.schema_index import schema_path
 from fleet.service import robot_views, start_fleet_service
+from utils.os_utils import require_verification_tools
 
 load_dotenv()
 
@@ -60,6 +61,10 @@ llm_cfg: dict[str, Any] = config_yaml["llm"]
 routing_cfg: dict[str, Any] = llm_cfg["routing"]
 endpoints_cfg: dict[str, Any] = llm_cfg["endpoints"]
 network_cfg: dict[str, Any] = config_yaml["network"]["tcp"]
+
+# Refuse to start rather than hand out unverified plans.
+if validation_cfg.get("ltl_enabled", False):
+    require_verification_tools(str(verification_cfg.get("spin_path", "")))
 
 # Robots register against a dedicated port so the address they are configured
 # with does not depend on whether the operator launched the web app or the CLI.

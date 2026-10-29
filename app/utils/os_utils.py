@@ -5,6 +5,8 @@ import subprocess
 import os
 import stat
 import struct
+import shutil
+import importlib.util
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -20,6 +22,33 @@ def execute_shell_cmd(command: list) -> Tuple[int, str]:
         out = str(err.output)
 
     return ret, out
+
+
+def missing_verification_tools(spin_path: str) -> list[str]:
+    """Names of the formal verification tools this environment lacks.
+
+    SPIN and Spot are only in images built with ENABLE_VERIFICATION=true.
+    """
+    missing: list[str] = []
+    if not spin_path or shutil.which(spin_path) is None:
+        missing.append("spin")
+    if importlib.util.find_spec("spot") is None:
+        missing.append("spot")
+    return missing
+
+
+def require_verification_tools(spin_path: str) -> None:
+    """Fail when verification is on but cannot run.
+
+    An operator who turns on verification must not get an unverified plan.
+    """
+    missing = missing_verification_tools(spin_path)
+    if missing:
+        raise RuntimeError(
+            f"planner.validation.ltl_enabled is true but {' and '.join(missing)} "
+            f"{'is' if len(missing) == 1 else 'are'} not installed. Build the image "
+            "with ENABLE_VERIFICATION=true, or set ltl_enabled: false."
+        )
 
 
 def write_out_file(dir: str, mp_out: str | None) -> str:

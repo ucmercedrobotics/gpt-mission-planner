@@ -9,6 +9,7 @@ from gpt_interface import LLMInterface
 from utils.os_utils import (
     execute_shell_cmd,
     read_file,
+    require_verification_tools,
     write_out_file,
     write_out_binary_file,
 )
@@ -198,6 +199,7 @@ class MissionPlanner:
         # init Promela compiler
         self.ltl: bool = self.config.ltl
         if self.ltl:
+            require_verification_tools(self.config.spin_path)
             from promela_compiler import PromelaCompiler
 
             self.aut: Any = None

@@ -137,7 +137,7 @@ LLM outputs are not deterministic, and hosted models change over time; by defaul
 
 The planner is the software base of a series of studies by our group, and the repository keeps a tag for the version used in each one, so that each study can be reproduced with its own code.
 It started as the syntax-feedback planner for precision agriculture of @CarpinLLMSubmitted, was extended to heterogeneous robots in @CARPINIFAC2025 and with formal verification of mission intent in @zuzuarregui2025asyouwish, and it was paired with new robot-side BT execution in @zuzuarregui2026tfr.
-Its fleet discovery and allocation are also the base of ongoing work on LLM-assisted task recovery for agricultural robot fleets [@zuzuarregui2027mas].
+Its fleet discovery and allocation are also the base of ongoing work on LLM-assisted task recovery for agricultural robot fleets.
 The tags for these studies are `icra-2025`, `ifac-2025`, `icra-2026`, and `tfr-2026`.
 These studies report research results on planning and on robot-side execution; none of them describes the planner software itself.
 

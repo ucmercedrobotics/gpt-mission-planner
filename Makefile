@@ -46,8 +46,8 @@ bash:
 		-v ${CACHE_DIR}:/root/.cache:Z \
 		-v ./test:/${WORKSPACE}/test:Z \
 		--env-file .env \
-		-p ${WEB_PORT}:${WEB_PORT} \
-		-p ${FLEET_PORT}:${FLEET_PORT} \
+		-p ${WEB_PORT}:8002 \
+		-p ${FLEET_PORT}:8003 \
 		${IMAGE} \
 		/bin/bash
 
@@ -70,6 +70,6 @@ prod:
 		-v ./logs:/gpt-mission-planner/logs:Z \
 		-v ${CACHE_DIR}:/root/.cache:Z \
 		--env-file .env \
-		-p ${WEB_PORT}:${WEB_PORT} \
-		-p ${FLEET_PORT}:${FLEET_PORT} \
+		-p ${WEB_PORT}:8002 \
+		-p ${FLEET_PORT}:8003 \
 		${IMAGE}:latest

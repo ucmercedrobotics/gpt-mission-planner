@@ -15,7 +15,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "app"))
 
-from app.utils.xml_utils import validate_any, validate_output
+from app.utils.xml_utils import set_mission_text, validate_any, validate_output
 
 
 ROVER_XSD = """<?xml version="1.0" encoding="UTF-8"?>
@@ -123,3 +123,50 @@ def test_schema_cache_survives_repeated_validation(schemas):
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+REPO = Path(__file__).parent.parent
+
+
+def test_set_mission_text_replaces_model_copy():
+    """The model echoed retry feedback into Mission; the request goes back in."""
+    xml = (
+        '<root schema_location="x.xsd">\n'
+        "  <Mission>We converted this XML mission to Promela and ran it\n"
+        "through SPIN. Failure occured...</Mission>\n"
+        "  <BehaviorTree/>\n"
+        "</root>"
+    )
+    out = set_mission_text(xml, "Visit Tree 1 & Tree 4 <quickly>")
+    assert "<Mission>Visit Tree 1 &amp; Tree 4 &lt;quickly&gt;</Mission>" in out
+    assert "SPIN" not in out
+    assert out.endswith("  <BehaviorTree/>\n</root>")
+
+
+def test_set_mission_text_without_mission_is_unchanged():
+    xml = '<root schema_location="x.xsd"><Drive/></root>'
+    assert set_mission_text(xml, "anything") == xml
+
+
+def test_set_mission_text_keeps_example_valid():
+    schema = str(REPO / "schemas" / "amiga_btcpp.xsd")
+    if not Path(schema).exists():
+        pytest.skip("schemas submodule not checked out")
+    # examples/orchard_demo/multirow_navigation.xml, inlined because `make bash`
+    # does not mount examples/.
+    xml = """<root BTCPP_format="4" schema_location="schemas/amiga_btcpp.xsd">
+  <Mission>Can you please visit Tree 1 and Tree 4, but don't approach them?</Mission>
+  <BehaviorTree ID="VisitTree1AndTree4">
+    <Sequence>
+      <MoveToAisleHead name="EnterColumn1" action_name="move_to_aisle_head" id="1" />
+      <MoveToTreeID name="VisitTree1" action_name="follow_tree_id_waypoint" id="1" approach_tree="false" />
+      <MoveToAisleHead name="ExitColumn1" action_name="move_to_aisle_head" id="1" />
+      <MoveToAisleHead name="EnterColumn4" action_name="move_to_aisle_head" id="4" />
+      <MoveToTreeID name="VisitTree4" action_name="follow_tree_id_waypoint" id="4" approach_tree="false" />
+    </Sequence>
+  </BehaviorTree>
+</root>
+"""
+    out = set_mission_text(xml, "Visit trees 1 and 4 without approaching them.")
+    ok, error = validate_output(schema, out)
+    assert ok is True, error

@@ -94,7 +94,9 @@ make build-image ENABLE_VERIFICATION=true   # with SPIN and Spot (Spot is compil
 An image built without verification has no SPIN or Spot. The default configuration turns
 verification on, so with such an image the planner stops at startup with an error. Set
 `planner.validation.ltl_enabled: false` in [app/config/localhost.yaml](app/config/localhost.yaml)
-to run it without verification.
+to run it without verification. Make this change before you run `make build-image`, because the
+image copies `app/`. With `make bash` or `make webapp`, the file from your clone is used, and you
+do not need to rebuild.
 
 ## Quick start
 

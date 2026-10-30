@@ -24,3 +24,6 @@ out.html
 .env
 logs/
 test.bin
+# JOSS paper
+paper/jats/
+paper/paper.pdf

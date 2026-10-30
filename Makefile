@@ -73,3 +73,10 @@ prod:
 		-p ${WEB_PORT}:8002 \
 		-p ${FLEET_PORT}:8003 \
 		${IMAGE}:latest
+
+paper:
+	docker run --rm \
+		--volume ${PWD}/paper:/data \
+		--user $(id -u):$(id -g) \
+		--env JOURNAL=joss \
+		openjournals/inara

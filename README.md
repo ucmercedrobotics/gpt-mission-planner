@@ -30,9 +30,7 @@ Planner host:
   - an API key for an LLM provider that [LiteLLM](https://docs.litellm.ai/docs/providers)
     supports (the default configuration uses OpenAI), or
   - a local OpenAI-compatible model server, for example [vLLM](https://docs.vllm.ai/).
-- Optional, for formal verification: [SPIN](https://spinroot.com/) and
-  [Spot](https://spot.lre.epita.fr/), which are built into the image with
-  `ENABLE_VERIFICATION=true` (the published image already has them), and an Anthropic API key,
+- Optional, for formal verification: an Anthropic API key,
   because the default configuration uses Anthropic models for LTL generation and for the arbiter.
 - Optional: Python 3.10 or later on the host, to run the mock robot in
   [scripts/mock_robot.py](scripts/mock_robot.py) (standard library only).
